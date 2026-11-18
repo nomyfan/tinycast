@@ -7,6 +7,7 @@
 mod apps;
 mod clipboard;
 mod clipboard_view;
+mod config;
 mod icons;
 mod mac;
 
@@ -26,10 +27,6 @@ use nsh_core::{
 
 use crate::{apps::AppEntry, clipboard::ClipEntry};
 
-/// Opens the launcher.
-const LAUNCHER_KEY: &str = "alt+space";
-/// Opens the clipboard history.
-const CLIPBOARD_KEY: &str = "alt+shift+v";
 
 /// The app's UI set (`nsh.json` `"rust"`).
 #[native_module("tinycast/native")]
@@ -51,6 +48,8 @@ pub(crate) struct Launcher {
     /// show a dot.
     running: Signal<HashSet<String>>,
     pub(crate) history: Signal<Vec<ClipEntry>>,
+    /// The user's settings (`config.toml`).
+    settings: Signal<config::Loaded>,
     pub(crate) mode: Signal<Mode>,
     /// The clipboard view was entered from the launcher's list, so Escape
     /// goes back to it rather than closing the popup.
@@ -177,6 +176,7 @@ pub fn App() -> impl IntoElement {
         apps: signal(Vec::new()),
         running: signal(HashSet::new()),
         history: signal(clipboard::load()),
+        settings: signal(config::load()),
         mode: signal(Mode::Apps),
         nested: stored(false),
         popup: stored(None),
@@ -195,28 +195,83 @@ pub fn App() -> impl IntoElement {
     });
     clipboard::watch(launcher.history);
 
-    for (key, mode) in [(LAUNCHER_KEY, Mode::Apps), (CLIPBOARD_KEY, Mode::Clipboard)] {
-        let taken = register_global_shortcut(key, move || launcher.toggle(mode));
-        spawn(async move {
-            if !taken.await {
-                log::warn!("{key} is held by another app");
-            }
-        });
+    config::watch(launcher.settings);
+    for problem in launcher.settings.with_untracked(|s| s.problems.clone()) {
+        log::warn!("{problem}");
     }
 
-    set_tray(
-        tray().title([nsh_core::desktop::TrayTitleRun::new("TC")]).tooltip("Tinycast").menu([
+    // The global shortcuts, registered again when the config changes them:
+    // the effect's cleanup gives the previous ones back first.
+    let hotkeys = computed(move || launcher.settings.with(|s| s.config.hotkeys.clone()));
+    // Keystrokes the system would not give: another app holds them.
+    let held = signal(Vec::<String>::new());
+    effect(move || {
+        let hotkeys = hotkeys.get();
+        held.set(Vec::new());
+        for (key, mode) in [(hotkeys.launcher, Mode::Apps), (hotkeys.clipboard, Mode::Clipboard)] {
+            let taken = register_global_shortcut(&key, move || launcher.toggle(mode));
+            spawn(async move {
+                // Spotlight's ⌘Space is the system's: registering it
+                // succeeds, and Spotlight still gets the key.
+                let spotlight = is_cmd_space(&key)
+                    && blocking(mac::spotlight_takes_cmd_space).await.unwrap_or(false);
+                if !taken.await || spotlight {
+                    log::warn!("{key} is held by {}", if spotlight { "Spotlight" } else { "another app" });
+                    held.update(|h| h.push(key));
+                }
+            });
+        }
+    });
+
+    // The tray, with what went wrong with the settings above its items.
+    effect(move || {
+        let mut problems = launcher.settings.with(|s| s.problems.clone());
+        problems.extend(held.get().into_iter().map(|key| {
+            if is_cmd_space(&key) {
+                format!("{key} is held by Spotlight: turn its shortcut off in System Settings")
+            } else {
+                format!("{key} is held by another app")
+            }
+        }));
+        let mut items: Vec<MenuItem> = problems
+            .into_iter()
+            .map(|problem| MenuItem::new(format!("⚠︎ {problem}")).disabled(true))
+            .collect();
+        if !items.is_empty() {
+            items.push(MenuItem::separator());
+        }
+        items.extend([
             MenuItem::new("Open Launcher").on_select(move || launcher.toggle(Mode::Apps)),
             MenuItem::new("Clipboard History").on_select(move || launcher.toggle(Mode::Clipboard)),
             MenuItem::separator(),
-            MenuItem::new("Clear Clipboard History")
-                .on_select(move || clipboard::clear(launcher.history)),
+            MenuItem::new("Open Config File…").on_select(|| {
+                let opened = open_path(config::path());
+                spawn(async move {
+                    if let Err(error) = opened.await {
+                        log::warn!("could not open the config: {error}");
+                    }
+                });
+            }),
             MenuItem::separator(),
             MenuItem::new("Quit Tinycast").on_select(quit),
-        ]),
-    );
+        ]);
+        set_tray(
+            tray()
+                .title([nsh_core::desktop::TrayTitleRun::new("TC")])
+                .tooltip("Tinycast")
+                .menu(items),
+        );
+    });
 
     view()
+}
+
+/// Whether `key` is ⌘Space, Spotlight's shortcut, however it is written.
+fn is_cmd_space(key: &str) -> bool {
+    use nsh_core::desktop::{Key, Shortcut};
+    Shortcut::parse(key, true).is_ok_and(|s| {
+        s.key == Key::Space && s.meta && !s.alt && !s.ctrl && !s.shift
+    })
 }
 
 fn popup_content(launcher: Launcher) -> impl IntoElement {
@@ -265,7 +320,7 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
             CommandItem::new(CLIPBOARD_COMMAND, "Clipboard History")
                 .group("Commands")
                 .keywords(["paste", "剪贴板"])
-                .shortcut(CLIPBOARD_KEY),
+                .shortcut(launcher.settings.with(|s| s.config.hotkeys.clipboard.clone())),
         );
         items
     };

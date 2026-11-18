@@ -110,6 +110,28 @@ pub fn frontmost_app() -> Option<FrontApp> {
     })
 }
 
+/// Whether Spotlight's ⌘Space shortcut is on (System Settings › Keyboard ›
+/// Keyboard Shortcuts › Spotlight). It is a system shortcut, not one an app
+/// registers: registering ⌘Space succeeds while it is on, and Spotlight
+/// still takes the key. Blocks: it reads the preference with `defaults`.
+pub fn spotlight_takes_cmd_space() -> bool {
+    // Entry 64 of AppleSymbolicHotKeys is "Show Spotlight search".
+    let output = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(
+            "/usr/bin/defaults export com.apple.symbolichotkeys - | \
+             /usr/bin/plutil -extract AppleSymbolicHotKeys.64.enabled raw -o - -",
+        )
+        .output();
+    match output {
+        // Missing entry: the shortcut was never changed, so it is on.
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim() == "true"
+        }
+        _ => true,
+    }
+}
+
 /// Where the running apps are installed.
 pub fn running_app_paths() -> std::collections::HashSet<String> {
     NSWorkspace::sharedWorkspace()
