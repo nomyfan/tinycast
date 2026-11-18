@@ -42,7 +42,8 @@ scripts/build.sh              # the same, re-signed with a Keychain certificate 
   `src/clipboard_view.rs`); destructive confirmation is a page of it, not a dialog.
 - **`src/mac.rs` holds every AppKit/CoreGraphics call nsh has no API for** (objc2 0.6 / objc2-app-kit 0.3, the
   versions nsh-platform-macos uses): pasteboard change count, text and images, concealed-type check, frontmost and
-  running apps, localized app names, icons as PNG, posting ⌘V, Spotlight's ⌘Space setting.
+  running apps, localized app names, icons as PNG, launching apps (`open_path` blocks the main thread until the app
+  has started), posting ⌘V, Spotlight's ⌘Space setting.
 - **Clipboard history** (`src/clipboard.rs`): macOS has no clipboard-changed event, so `watch` polls
   `NSPasteboard.changeCount` every 400 ms. Text goes in `history.json`; images are PNGs named by content hash in
   `images/`; entries past 200 or deleted take their image files with them.

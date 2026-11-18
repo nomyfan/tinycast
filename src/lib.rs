@@ -157,14 +157,9 @@ impl Launcher {
         }
     }
 
-    fn launch(self, path: String) {
+    fn launch(self, path: &str) {
         self.close();
-        let opened = open_path(path);
-        spawn(async move {
-            if let Err(error) = opened.await {
-                log::warn!("could not open the app: {error}");
-            }
-        });
+        mac::launch_app(path);
     }
 }
 
@@ -332,7 +327,7 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 launcher.nested.replace(true);
                 launcher.mode.set(Mode::Clipboard);
             } else if let Some(path) = id.strip_prefix("app:") {
-                launcher.launch(path.to_owned());
+                launcher.launch(path);
             }
         })
         .on_cancel(move || launcher.close())

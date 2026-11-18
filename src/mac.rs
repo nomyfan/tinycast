@@ -1,14 +1,19 @@
 //! The macOS calls nsh has no API for: the pasteboard's change count and
-//! types, the frontmost app, localized app names, and posting ⌘V.
+//! types, the frontmost app, localized app names, launching apps, and
+//! posting ⌘V.
 
 use std::ffi::c_void;
 
+use block2::RcBlock;
 use objc2::{AllocAnyThread, runtime::ProtocolObject};
 use objc2_app_kit::{
     NSBitmapImageFileType, NSBitmapImageRep, NSImage, NSPasteboard, NSPasteboardTypePNG,
-    NSPasteboardTypeString, NSPasteboardTypeTIFF, NSWorkspace,
+    NSPasteboardTypeString, NSPasteboardTypeTIFF, NSRunningApplication, NSWorkspace,
+    NSWorkspaceOpenConfiguration,
 };
-use objc2_foundation::{NSArray, NSDictionary, NSFileManager, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{
+    NSArray, NSDictionary, NSError, NSFileManager, NSPoint, NSRect, NSSize, NSString, NSURL,
+};
 
 /// Types password managers and similar apps mark their copies with, so
 /// clipboard tools keep them out of the history (nspasteboard.org).
@@ -130,6 +135,26 @@ pub fn spotlight_takes_cmd_space() -> bool {
         }
         _ => true,
     }
+}
+
+/// Launches (or brings forward) the app bundle at `path` without waiting
+/// for it: `NSWorkspace openURL:`, which nsh's `open_path` uses, blocks the
+/// main thread until the app has started. Failures are logged.
+pub fn launch_app(path: &str) {
+    let url = NSURL::fileURLWithPath(&NSString::from_str(path));
+    let path = path.to_owned();
+    // Runs on a queue of LaunchServices' once the launch is done.
+    let done = RcBlock::new(move |_app: *mut NSRunningApplication, error: *mut NSError| {
+        // SAFETY: `error` is null or a valid NSError for the block's duration.
+        if let Some(error) = unsafe { error.as_ref() } {
+            log::warn!("could not open {path}: {}", error.localizedDescription());
+        }
+    });
+    NSWorkspace::sharedWorkspace().openApplicationAtURL_configuration_completionHandler(
+        &url,
+        &NSWorkspaceOpenConfiguration::configuration(),
+        Some(&done),
+    );
 }
 
 /// Where the running apps are installed.

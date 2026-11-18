@@ -2253,6 +2253,7 @@ dependencies = [
 name = "nsh-app-tinycast"
 version = "0.1.0"
 dependencies = [
+ "block2",
  "env_logger",
  "log",
  "nsh-base",
