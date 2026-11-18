@@ -241,7 +241,7 @@ fn popup_content(launcher: Launcher) -> impl IntoElement {
             backdrop.state = MacOsBackdropState::Active;
             backdrop
         })
-        .app_class("border border-border/60 bg-popover/55 text-popover-foreground")
+        .app_class("border border-foreground/10 bg-popover/55 text-popover-foreground")
         .child(dynamic(move || match launcher.mode.get() {
             Mode::Apps => app_palette(launcher).into_element(),
             Mode::Clipboard => clipboard_view::clipboard_view(launcher).into_element(),
@@ -361,10 +361,10 @@ pub(crate) fn palette(launcher: Launcher) -> nsh_base::CommandElement {
 /// `command` styled for the popup.
 pub(crate) fn styled(command: nsh_base::CommandElement) -> nsh_base::CommandElement {
     command
-        .search_bar_class("flex-row items-center border-b border-border px-4")
+        .search_bar_class("flex-row items-center border-b border-foreground/10 px-4")
         .search_class("h-12 flex-1 text-base text-foreground placeholder:text-muted-foreground")
         .list_class("flex-1 p-1.5")
         .group_class("px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground")
-        .separator_class("my-1 h-px bg-border")
+        .separator_class("my-1 h-px bg-foreground/10")
         .item_class("group h-10 flex-row items-center rounded-md px-2.5 focus:bg-foreground/10")
 }

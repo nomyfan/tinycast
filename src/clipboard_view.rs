@@ -215,7 +215,7 @@ fn entries(v: View) -> impl IntoElement {
         })
         .empty(text("Nothing copied yet").app_class("py-6 text-center text-sm text-muted-foreground"))
         .w(px(320.0))
-        .app_class("border-r border-border")
+        .app_class("border-r border-foreground/10")
 }
 
 fn preview(v: View) -> impl IntoElement {
@@ -255,12 +255,12 @@ fn footer(v: View, target_name: String) -> impl IntoElement {
         .items_center()
         .gap_2()
         .px_3()
-        .app_class("border-t border-border/60 bg-foreground/[0.03]")
+        .app_class("border-t border-foreground/10 bg-foreground/[0.03]")
         .child(image(icons::svg_uri(icons::CLIPBOARD_SVG)).w(px(18.0)).h(px(18.0)))
         .child(text("Clipboard History").flex_1().app_class("text-sm text-muted-foreground"))
         .child(text(format!("Paste to {target_name}")).app_class("text-sm"))
         .child(keycaps("↩"))
-        .child(view().w(px(1.0)).h(px(16.0)).mx_1().app_class("bg-border"))
+        .child(view().w(px(1.0)).h(px(16.0)).mx_1().app_class("bg-foreground/10"))
         .child(
             nsh_base::button()
                 .flex_row()
@@ -302,7 +302,7 @@ fn keycaps(keys: &str) -> impl IntoElement {
 fn actions_panel(v: View) -> impl IntoElement {
     view()
         .app_class(
-            "absolute right-3 bottom-12 w-80 overflow-hidden rounded-xl border border-border \
+            "absolute right-3 bottom-12 w-80 overflow-hidden rounded-xl border border-foreground/10 \
              bg-popover shadow-xl",
         )
         .child(dynamic(move || match v.actions.get() {
@@ -356,7 +356,7 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
         .auto_focus(true)
         .placeholder("Search…")
         .list_class("max-h-72 p-1.5")
-        .search_bar_class("flex-row items-center border-t border-border px-3")
+        .search_bar_class("flex-row items-center border-t border-foreground/10 px-3")
         .search_class("h-10 flex-1 text-sm text-foreground placeholder:text-muted-foreground")
         // Sections without headings: the separator between them is enough.
         .render_group(|_: &CommandGroup| view())
