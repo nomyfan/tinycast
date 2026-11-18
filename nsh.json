@@ -1,0 +1,13 @@
+{
+  "name": "Tinycast",
+  "id": "dev.callcc.tinycast",
+  "version": "1.0.0",
+  "build": 1,
+  "rust": ".",
+  "root": "App",
+  "window": {
+    "title": "Tinycast",
+    "defaultVisible": false
+  },
+  "macos": { "activationPolicy": "accessory" }
+}
