@@ -1,6 +1,8 @@
 //! The macOS calls nsh has no API for: the pasteboard's change count and
 //! types, the frontmost app, localized app names, launching apps, and
-//! posting ⌘V.
+//! posting ⌘V, global shortcuts shared with another app.
+
+pub mod shared_hotkey;
 
 use std::ffi::c_void;
 
@@ -116,9 +118,8 @@ pub fn frontmost_app() -> Option<FrontApp> {
 }
 
 /// Whether Spotlight's ⌘Space shortcut is on (System Settings › Keyboard ›
-/// Keyboard Shortcuts › Spotlight). It is a system shortcut, not one an app
-/// registers: registering ⌘Space succeeds while it is on, and Spotlight
-/// still takes the key. Blocks: it reads the preference with `defaults`.
+/// Keyboard Shortcuts › Spotlight). Spotlight then takes the key whatever
+/// other apps register. Blocks: it reads the preference with `defaults`.
 pub fn spotlight_takes_cmd_space() -> bool {
     // Entry 64 of AppleSymbolicHotKeys is "Show Spotlight search".
     let output = std::process::Command::new("/bin/sh")

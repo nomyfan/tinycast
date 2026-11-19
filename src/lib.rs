@@ -16,7 +16,7 @@ use std::{collections::HashSet, time::Duration};
 use nsh_base::{Command, CommandApi, CommandEntry, CommandItem, button, command, theme};
 use nsh_core::{
     MacOsBackdrop, MacOsBackdropBlending, MacOsBackdropMaterial, MacOsBackdropState,
-    desktop::{WindowAttributes, WindowKind, WindowPosition},
+    desktop::{Key, Shortcut, WindowAttributes, WindowKind, WindowPosition},
     element::{AdaptiveColor, ImageSrc},
     element::desktop::{
         MenuItem, WindowRef, current_window, open_window, quit, register_global_shortcut, set_tray,
@@ -25,7 +25,7 @@ use nsh_core::{
     prelude::*,
 };
 
-use crate::{apps::AppEntry, clipboard::ClipEntry};
+use crate::{apps::AppEntry, clipboard::ClipEntry, mac::shared_hotkey::SharedHotKey};
 
 
 /// The app's UI set (`nsh.json` `"rust"`).
@@ -206,20 +206,42 @@ pub fn App() -> impl IntoElement {
         held.set(Vec::new());
         for (key, mode) in [(hotkeys.launcher, Mode::Apps), (hotkeys.clipboard, Mode::Clipboard)] {
             let taken = register_global_shortcut(&key, move || launcher.toggle(mode));
+            // Ends with the effect's run, giving a shared hot key back.
             spawn(async move {
-                // Spotlight's ⌘Space is the system's: registering it
-                // succeeds, and Spotlight still gets the key.
-                let spotlight = is_cmd_space(&key)
-                    && blocking(mac::spotlight_takes_cmd_space).await.unwrap_or(false);
-                let problem = if spotlight {
-                    format!("{key} is held by Spotlight: turn its shortcut off in System Settings")
-                } else if !taken.await {
-                    format!("{key} is held by another app")
-                } else {
-                    return;
+                let report = |problem: String| {
+                    log::warn!("{problem}");
+                    held.update(|h| h.push(problem));
                 };
-                log::warn!("{problem}");
-                held.update(|h| h.push(problem));
+                // With its shortcut on, Spotlight gets ⌘Space whatever is
+                // registered.
+                if is_cmd_space(&key)
+                    && blocking(mac::spotlight_takes_cmd_space).await.unwrap_or(false)
+                {
+                    return report(format!(
+                        "{key} is held by Spotlight: turn its shortcut off in System Settings"
+                    ));
+                }
+                if taken.await {
+                    return;
+                }
+                // Another app has it (macOS 27's Spotlight keeps ⌘Space with
+                // its shortcut off): share it, as Raycast does.
+                let (pressed, mut presses) = tokio::sync::mpsc::unbounded_channel();
+                let shared = Shortcut::parse(&key, true)
+                    .ok()
+                    .and_then(|shortcut| SharedHotKey::register(&shortcut, pressed));
+                let hot_key = match shared {
+                    Some((hot_key, registered)) => registered.await.unwrap_or(false).then_some(hot_key),
+                    None => None,
+                };
+                // Kept until the task ends.
+                let Some(_hot_key) = hot_key else {
+                    return report(format!("{key} is held by another app"));
+                };
+                log::info!("{key} is shared with another app");
+                while presses.recv().await.is_some() {
+                    launcher.toggle(mode);
+                }
             });
         }
     });
@@ -263,7 +285,6 @@ pub fn App() -> impl IntoElement {
 
 /// Whether `key` is ⌘Space, Spotlight's shortcut, however it is written.
 fn is_cmd_space(key: &str) -> bool {
-    use nsh_core::desktop::{Key, Shortcut};
     Shortcut::parse(key, true).is_ok_and(|s| {
         s.key == Key::Space && s.meta && !s.alt && !s.ctrl && !s.shift
     })

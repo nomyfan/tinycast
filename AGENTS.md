@@ -43,7 +43,8 @@ scripts/build.sh              # the same, re-signed with a Keychain certificate 
 - **`src/mac.rs` holds every AppKit/CoreGraphics call nsh has no API for** (objc2 0.6 / objc2-app-kit 0.3, the
   versions nsh-platform-macos uses): pasteboard change count, text and images, concealed-type check, frontmost and
   running apps, localized app names, icons as PNG, launching apps (`open_path` blocks the main thread until the app
-  has started), posting ⌘V, Spotlight's ⌘Space setting.
+  has started), posting ⌘V, Spotlight's ⌘Space setting, global shortcuts shared with another app
+  (`src/mac/shared_hotkey.rs`).
 - **Clipboard history** (`src/clipboard.rs`): macOS has no clipboard-changed event, so `watch` polls
   `NSPasteboard.changeCount` every 400 ms. Text goes in `history.json`; images are PNGs named by content hash in
   `images/`; entries past 200 or deleted take their image files with them.
@@ -71,8 +72,11 @@ Data: `~/Library/Application Support/Tinycast/` (`history.json`, `images/`), ico
   them. Keep confirmations inside the popup.
 - The popup's `close_on_escape` is off so `Command`'s `on_cancel` decides what Escape does.
 - `register_global_shortcut` panics on an invalid keystroke: validate with `nsh_core::desktop::Shortcut::parse`.
-  Registering ⌘Space succeeds even while Spotlight owns it (a system shortcut), so `mac::spotlight_takes_cmd_space`
-  checks that separately. Another app holding a shortcut (e.g. Raycast) makes registration answer `false`.
+  With Spotlight's ⌘Space setting on, Spotlight gets the key whatever is registered, so
+  `mac::spotlight_takes_cmd_space` checks that separately. `register_global_shortcut` always asks for an exclusive
+  Carbon hot key, which any other registration of the keystroke makes answer `false`; macOS 27's Spotlight (the Siri
+  AI app, relaunched at once when killed) registers ⌘Space even with that setting off. Tinycast then registers it
+  shared, as Raycast does (`mac::shared_hotkey`, Carbon on the main thread, presses sent back to the engine thread).
 - Conditional key bindings: call `on_key_with` inside a `when(..)` branch; the binding goes when the branch does
   (Backspace-in-empty-field goes back). Rust's `when` takes a `bool` condition.
 - `Command` always puts its search bar first; the actions panel flips it with `flex-col-reverse` and renders its
