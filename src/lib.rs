@@ -79,9 +79,9 @@ impl Launcher {
         // A non-activating panel: the app in front stays in front.
         attributes.activate = Some(false);
         // The content draws the rounded surface; the window around it shows
-        // nothing but its shadow.
+        // nothing. No system shadow: it rims the popup with a dark line.
         attributes.transparent = Some(true);
-        attributes.shadow = Some(true);
+        attributes.shadow = Some(false);
         // The palette answers Escape: it clears the query, then goes back
         // or closes the popup (`on_cancel`).
         attributes.close_on_escape = Some(false);
@@ -334,6 +334,7 @@ fn popup_content(launcher: Launcher) -> impl IntoElement {
             backdrop.state = MacOsBackdropState::Active;
             backdrop
         })
+        // The edge is all that outlines the popup: the window has no shadow.
         .app_class("border border-foreground/10 bg-popover/55 text-popover-foreground")
         .child(dynamic(move || match launcher.mode.get() {
             Mode::Apps => app_palette(launcher).into_element(),
