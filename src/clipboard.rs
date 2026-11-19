@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::mac;
 
-/// How many entries the history keeps.
+/// How many entries the history keeps, pinned ones aside.
 const LIMIT: usize = 200;
 /// How often the pasteboard is checked for a change.
 const POLL: Duration = Duration::from_millis(400);
@@ -37,6 +37,10 @@ pub struct ClipEntry {
     pub source_path: Option<String>,
     /// When it was copied, in Unix milliseconds.
     pub copied_at: u64,
+    /// Kept at the top of the list, past the history's limit and the
+    /// deletions of many entries.
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 /// An image in the history.
@@ -130,6 +134,7 @@ pub fn watch(history: Signal<Vec<ClipEntry>>) {
             source,
             source_path,
             copied_at: nsh_core::time::unix_ms() as u64,
+            pinned: false,
         };
         if let Some(text) = mac::read_text() {
             add(history, entry(text, None));
@@ -170,19 +175,28 @@ fn read_image() -> Option<ClipImage> {
 }
 
 /// Puts `entry` at the top of `history`, in place of an entry with the
-/// same content, and drops what goes past the limit.
+/// same content (keeping its pin), and drops the unpinned entries that go
+/// past the limit.
 fn add(history: Signal<Vec<ClipEntry>>, mut entry: ClipEntry) {
     let mut dropped = Vec::new();
     history.update(|entries| {
         if entries.first().is_some_and(|e| e.same_content(&entry)) {
             return;
         }
-        entries.retain(|e| !e.same_content(&entry));
+        entries.retain(|e| {
+            let same = e.same_content(&entry);
+            entry.pinned |= same && e.pinned;
+            !same
+        });
         entry.id = entries.iter().map(|e| e.id).max().map_or(1, |id| id + 1);
         entries.insert(0, entry);
-        if entries.len() > LIMIT {
-            dropped = entries.split_off(LIMIT);
-        }
+        let mut unpinned = 0;
+        let kept;
+        (kept, dropped) = std::mem::take(entries).into_iter().partition(|e| {
+            unpinned += usize::from(!e.pinned);
+            e.pinned || unpinned <= LIMIT
+        });
+        *entries = kept;
     });
     remove_images(dropped);
     save(history.get_untracked());
@@ -222,11 +236,12 @@ pub fn remove(history: Signal<Vec<ClipEntry>>, doomed: impl Fn(&ClipEntry) -> bo
     save(history.get_untracked());
 }
 
-/// Removes every entry, on screen and on disk.
-pub fn clear(history: Signal<Vec<ClipEntry>>) {
-    history.set(Vec::new());
-    save(Vec::new());
-    blocking(|| {
-        let _ = std::fs::remove_dir_all(images_dir());
+/// Pins the entry `id`, or unpins it when it is pinned.
+pub fn toggle_pin(history: Signal<Vec<ClipEntry>>, id: u64) {
+    history.update(|entries| {
+        if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
+            entry.pinned = !entry.pinned;
+        }
     });
+    save(history.get_untracked());
 }

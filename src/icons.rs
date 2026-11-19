@@ -38,6 +38,14 @@ pub const COPY_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0
     <rect x='9' y='9' width='11' height='11' rx='2'/>\
     <path d='M5 15V6a2 2 0 0 1 2-2h8'/></svg>";
 
+/// A push pin with rounded corners, drawn in the color the image's tint
+/// gives it.
+pub const PIN_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' \
+    fill='none' stroke='#000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>\
+    <rect x='8' y='2.5' width='8' height='3' rx='1.5'/>\
+    <path d='M10 5.5V8.6C10 9.3 9.7 9.9 9.2 10.4L7.4 12.2C6.6 13 7.1 14 8.1 14H15.9\
+    C16.9 14 17.4 13 16.6 12.2L14.8 10.4C14.3 9.9 14 9.3 14 8.6V5.5M12 14v6.5'/></svg>";
+
 /// A trash can, red as destructive actions are.
 pub const TRASH_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' \
     fill='none' stroke='#E5484D' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>\

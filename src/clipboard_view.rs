@@ -1,7 +1,7 @@
 //! The clipboard history's view: the entries, the highlighted one's
 //! preview, a footer, and an actions panel (⌘K) as Raycast's.
 
-use nsh_base::{CommandEntry, CommandGroup, CommandItem, command};
+use nsh_base::{CommandApi, CommandEntry, CommandGroup, CommandItem, command};
 use nsh_core::{element::ImageSrc, keymap::When, prelude::*};
 
 use crate::{
@@ -57,6 +57,17 @@ impl View {
         self.actions.set(Some(page));
     }
 
+    /// Highlights the entry of row `row_id` and opens the actions for it:
+    /// a right click on a row highlights it even when the pointer has not
+    /// moved over it.
+    fn open_actions_for(self, row_id: &str) {
+        if let Some(api) = self.launcher.search.api::<CommandApi>() {
+            api.highlight(row_id.to_owned());
+        }
+        self.highlighted.set(parse_id(row_id));
+        self.open_actions(Page::Main);
+    }
+
     fn close_actions(self) {
         self.actions.set(None);
         self.launcher.focus_search();
@@ -74,21 +85,36 @@ impl View {
         }
     }
 
+    fn toggle_pin(self) {
+        if let Some(id) = self.highlighted.get_untracked() {
+            clipboard::toggle_pin(self.launcher.history, id);
+        }
+        self.close_actions();
+    }
+
+    /// Deletes the highlighted entry; the highlight goes to the entry shown
+    /// after it, else the one before (`Command` alone would go to the first).
     fn delete(self) {
         if let Some(id) = self.highlighted.get_untracked() {
+            let next = self.launcher.history.with_untracked(|entries| {
+                self.query.with_untracked(|q| next_after_delete(entries, q, id))
+            });
             clipboard::remove(self.launcher.history, |e| e.id == id);
+            if let (Some(next), Some(api)) = (next, self.launcher.search.api::<CommandApi>()) {
+                api.highlight(format!("clip:{next}"));
+            }
         }
         self.close_actions();
     }
 
     fn delete_last(self, minutes: u64) {
         let since = (nsh_core::time::unix_ms() as u64).saturating_sub(minutes * 60_000);
-        clipboard::remove(self.launcher.history, |e| e.copied_at >= since);
+        clipboard::remove(self.launcher.history, |e| !e.pinned && e.copied_at >= since);
         self.close_actions();
     }
 
     fn delete_all(self) {
-        clipboard::clear(self.launcher.history);
+        clipboard::remove(self.launcher.history, |e| !e.pinned);
         self.close_actions();
     }
 }
@@ -127,6 +153,7 @@ pub fn clipboard_view(launcher: Launcher) -> impl IntoElement {
         None => v.open_actions(Page::Main),
     });
     on_key_with("mod+enter", always, move |_| v.copy());
+    on_key_with("mod+shift+p", always, move |_| v.toggle_pin());
     on_key_with("ctrl+x", always, move |_| v.delete());
     on_key_with("mod+shift+x", always, move |_| v.open_actions(Page::DeleteRange));
     on_key_with("ctrl+shift+x", always, move |_| v.open_actions(Page::ConfirmDeleteAll));
@@ -155,27 +182,68 @@ pub fn clipboard_view(launcher: Launcher) -> impl IntoElement {
         ))
         .child(view().flex_1().flex_row().child(entries(v)).child(preview(v)))
         .child(footer(v, target_name))
+        // While the actions panel is open, a clear cover over the rest takes
+        // the pointer: a row it passes over would take the highlight, and the
+        // actions would apply to another entry than the one they were opened
+        // for. A click on it closes the panel, as in Raycast.
+        .child(when(
+            move || v.actions.get().is_some(),
+            move || view().app_class("absolute inset-0").on_press(move || v.close_actions()),
+        ))
         .child(when(move || v.actions.get().is_some(), move || actions_panel(v)))
 }
 
-fn entries(v: View) -> impl IntoElement {
-    let parse_id = |id: &str| id.strip_prefix("clip:").and_then(|n| n.parse::<u64>().ok());
-    let items = move || {
-        v.launcher.history.with(|entries| {
-            entries
-                .iter()
-                .map(|entry| {
-                    let keywords = match entry.image {
-                        Some(_) => "image picture screenshot 图片".to_owned(),
-                        None => entry.text.chars().take(2000).collect(),
-                    };
-                    CommandItem::new(format!("clip:{}", entry.id), entry.label()).keywords([keywords])
-                })
-                .collect::<Vec<_>>()
+/// The entry id of a row's id (`clip:<id>`).
+fn parse_id(row_id: &str) -> Option<u64> {
+    row_id.strip_prefix("clip:").and_then(|n| n.parse().ok())
+}
+
+/// The list's rows: the pinned entries first, in a section of their own;
+/// the others are in one only when there are pinned ones.
+fn rows(entries: &[ClipEntry]) -> Vec<CommandItem> {
+    let any_pinned = entries.iter().any(|e| e.pinned);
+    let (pinned, rest): (Vec<_>, Vec<_>) = entries.iter().partition(|e| e.pinned);
+    pinned
+        .into_iter()
+        .chain(rest)
+        .map(|entry| {
+            let keywords = match entry.image {
+                Some(_) => "image picture screenshot 图片".to_owned(),
+                None => entry.text.chars().take(2000).collect(),
+            };
+            let item =
+                CommandItem::new(format!("clip:{}", entry.id), entry.label()).keywords([keywords]);
+            match (entry.pinned, any_pinned) {
+                (true, _) => item.group("Pinned"),
+                (false, true) => item.group("Recent"),
+                (false, false) => item,
+            }
         })
-    };
+        .collect()
+}
+
+/// The entry to highlight once `id` is deleted: the one shown after it,
+/// else the one before it. `query` filters the rows as `Command` does: its
+/// folded text in a row's label or keywords.
+fn next_after_delete(entries: &[ClipEntry], query: &str, id: u64) -> Option<u64> {
+    let query = query.trim().to_lowercase();
+    let shown: Vec<u64> = rows(entries)
+        .iter()
+        .filter(|row| {
+            query.is_empty()
+                || std::iter::once(&row.label)
+                    .chain(&row.keywords)
+                    .any(|text| text.to_lowercase().contains(&query))
+        })
+        .filter_map(|row| parse_id(&row.id))
+        .collect();
+    let at = shown.iter().position(|&e| e == id)?;
+    shown.get(at + 1).or(at.checked_sub(1).and_then(|i| shown.get(i))).copied()
+}
+
+fn entries(v: View) -> impl IntoElement {
     palette(v.launcher)
-        .items(items)
+        .items(move || v.launcher.history.with(|entries| rows(entries)))
         .placeholder("Search clipboard history…")
         .search_prefix(back_button(v.launcher))
         .on_select(move |id: &SharedString| {
@@ -205,11 +273,15 @@ fn entries(v: View) -> impl IntoElement {
                 let icon = icons::cached_path(&entry.source_path?);
                 icon.exists().then(|| icon.to_string_lossy().into_owned())
             });
+            let row_id = entry.id.clone();
             view()
                 .flex_1()
+                // The row's full height, for a right click anywhere on it.
+                .app_class("self-stretch")
                 .flex_row()
                 .items_center()
                 .gap_2p5()
+                .on_context_menu(move |_: &ContextMenuEvent| v.open_actions_for(&row_id))
                 .child(row_icon(src))
                 .child(text(entry.label.clone()).flex_1().app_class("text-sm").number_of_lines(1))
         })
@@ -313,7 +385,14 @@ fn actions_panel(v: View) -> impl IntoElement {
 
 fn actions_page(v: View, page: Page) -> impl IntoElement {
     let target = target();
-    let count = v.launcher.history.with(Vec::len);
+    let (count, pinned) = v.launcher.history.with(|entries| {
+        let pinned = entries.iter().filter(|e| e.pinned).count();
+        (entries.len() - pinned, pinned)
+    });
+    let pin_label = match v.current().is_some_and(|e| e.pinned) {
+        true => "Unpin Entry",
+        false => "Pin Entry",
+    };
     let (header, items): (Option<String>, Vec<CommandItem>) = match page {
         Page::Main => (
             None,
@@ -322,6 +401,7 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
                     .group("Use")
                     .shortcut("enter"),
                 CommandItem::new("copy", "Copy to Clipboard").group("Use").shortcut("mod+enter"),
+                CommandItem::new("pin", pin_label).group("Organize").shortcut("mod+shift+p"),
                 CommandItem::new("delete", "Delete Entry").group("Delete").shortcut("ctrl+x"),
                 CommandItem::new("delete-range", "Delete Entries…")
                     .group("Delete")
@@ -339,7 +419,13 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
                 .collect(),
         ),
         Page::ConfirmDeleteAll => (
-            Some(format!("Delete all {count} entries? This cannot be undone.")),
+            Some(match pinned {
+                0 => format!("Delete all {count} entries? This cannot be undone."),
+                _ => format!(
+                    "Delete all {count} unpinned entries? This cannot be undone. \
+                     Pinned entries stay."
+                ),
+            }),
             vec![
                 CommandItem::new("confirm-delete-all", "Delete All Entries"),
                 CommandItem::new("cancel", "Cancel"),
@@ -369,6 +455,7 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
         .on_select(move |id: &SharedString| match id.as_ref() {
             "paste" => v.paste(),
             "copy" => v.copy(),
+            "pin" => v.toggle_pin(),
             "delete" => v.delete(),
             "delete-range" => v.open_actions(Page::DeleteRange),
             "delete-all" => v.open_actions(Page::ConfirmDeleteAll),
@@ -386,11 +473,14 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
                 "paste" => Some(image(
                     paste_icon.clone().unwrap_or_else(|| icons::svg_uri(icons::CLIPBOARD_SVG)),
                 )),
-                "copy" => Some(
-                    image(icons::svg_uri(icons::COPY_SVG))
-                        .tint_color(move || nsh_core::element::AdaptiveColor::from(
-                            nsh_base::theme().foreground,
-                        )),
+                "copy" | "pin" => Some(
+                    image(icons::svg_uri(match entry.id.as_ref() {
+                        "copy" => icons::COPY_SVG,
+                        _ => icons::PIN_SVG,
+                    }))
+                    .tint_color(move || nsh_core::element::AdaptiveColor::from(
+                        nsh_base::theme().foreground,
+                    )),
                 ),
                 id if id.starts_with("delete") => Some(image(icons::svg_uri(icons::TRASH_SVG))),
                 _ => None,
@@ -442,4 +532,52 @@ fn details(entry: &ClipEntry) -> String {
     };
     let source = entry.source.as_deref().map(|s| format!(" · from {s}")).unwrap_or_default();
     format!("{what} · {ago}{source}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(id: u64, text: &str, pinned: bool) -> ClipEntry {
+        ClipEntry {
+            id,
+            text: text.into(),
+            image: None,
+            source: None,
+            source_path: None,
+            copied_at: 0,
+            pinned,
+        }
+    }
+
+    /// Newest first, as the history keeps them.
+    fn history() -> Vec<ClipEntry> {
+        vec![
+            entry(5, "apple", false),
+            entry(4, "banana", true),
+            entry(3, "cherry", false),
+            entry(2, "apricot", false),
+            entry(1, "date", false),
+        ]
+    }
+
+    #[test]
+    fn deleting_goes_to_the_next_row_shown() {
+        // Shown: banana (pinned), apple, cherry, apricot, date.
+        assert_eq!(next_after_delete(&history(), "", 5), Some(3));
+        assert_eq!(next_after_delete(&history(), "", 4), Some(5));
+    }
+
+    #[test]
+    fn deleting_the_last_row_goes_to_the_one_before() {
+        assert_eq!(next_after_delete(&history(), "", 1), Some(2));
+        assert_eq!(next_after_delete(&[entry(1, "only", false)], "", 1), None);
+    }
+
+    #[test]
+    fn deleting_follows_the_query() {
+        // "AP " shows apple and apricot.
+        assert_eq!(next_after_delete(&history(), "AP ", 5), Some(2));
+        assert_eq!(next_after_delete(&history(), "AP ", 2), Some(5));
+    }
 }

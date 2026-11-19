@@ -47,7 +47,8 @@ scripts/build.sh              # the same, re-signed with a Keychain certificate 
   (`src/mac/shared_hotkey.rs`).
 - **Clipboard history** (`src/clipboard.rs`): macOS has no clipboard-changed event, so `watch` polls
   `NSPasteboard.changeCount` every 400 ms. Text goes in `history.json`; images are PNGs named by content hash in
-  `images/`; entries past 200 or deleted take their image files with them.
+  `images/`; unpinned entries past 200 or deleted take their image files with them. Pinned entries (⇧⌘P) list
+  first and are spared by the limit and by "Delete Entries…"/"Delete All Entries…".
 - **Settings** (`src/config.rs`): `~/.config/tinycast/config.toml` (written with defaults on first launch), polled
   for changes every second. Shortcuts are registered in an `effect` whose `cleanup` releases the previous ones on
   reload. Problems (bad TOML, bad keystroke, held shortcut) become disabled "⚠︎" items in the tray menu, and the
