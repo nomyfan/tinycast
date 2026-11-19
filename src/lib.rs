@@ -16,11 +16,11 @@ use std::{collections::HashSet, time::Duration};
 use nsh_base::{Command, CommandApi, CommandEntry, CommandItem, button, command, theme};
 use nsh_core::{
     MacOsBackdrop, MacOsBackdropBlending, MacOsBackdropMaterial, MacOsBackdropState,
-    desktop::{Key, Shortcut, WindowAttributes, WindowKind, WindowPosition},
+    desktop::{DisplayId, Key, Shortcut, WindowAttributes, WindowKind, WindowPosition},
     element::{AdaptiveColor, ImageSrc},
     element::desktop::{
-        MenuItem, WindowRef, current_window, open_window, quit, register_global_shortcut, set_tray,
-        tray, window,
+        MenuItem, WindowRef, current_window, displays, open_window, quit,
+        register_global_shortcut, set_tray, tray, window,
     },
     prelude::*,
 };
@@ -85,18 +85,22 @@ impl Launcher {
         // The palette answers Escape: it clears the query, then goes back
         // or closes the popup (`on_cancel`).
         attributes.close_on_escape = Some(false);
-        let popup = open_window(
-            window()
-                .id("launcher")
-                .kind(WindowKind::Popup)
-                .default_size(size(px(760.0), px(460.0)))
-                .default_position(WindowPosition::Center)
-                .attributes(attributes)
-                .on_open_change(move |_| {
-                    self.popup.replace(None);
-                })
-                .content(move || popup_content(self)),
-        );
+        let mut options = window()
+            .id("launcher")
+            .kind(WindowKind::Popup)
+            .default_size(size(px(760.0), px(460.0)))
+            .default_position(WindowPosition::Center)
+            .attributes(attributes)
+            .on_open_change(move |_| {
+                self.popup.replace(None);
+            })
+            .content(move || popup_content(self));
+        // Without a display the popup opens on the hidden main window's,
+        // always the same one.
+        if let Some(display) = mouse_display() {
+            options = options.display(display);
+        }
+        let popup = open_window(options);
         self.popup.replace(popup);
         // The window is made when this turn commits; a focus request sent
         // before that is lost, and the popup would show without the keyboard.
@@ -288,6 +292,24 @@ fn is_cmd_space(key: &str) -> bool {
     Shortcut::parse(key, true).is_ok_and(|s| {
         s.key == Key::Space && s.meta && !s.alt && !s.ctrl && !s.shift
     })
+}
+
+/// The display the mouse pointer is on, where the popup opens.
+fn mouse_display() -> Option<DisplayId> {
+    let displays = displays();
+    let primary = displays.iter().find(|d| d.primary)?;
+    let (x, y) = mac::mouse_location();
+    // Cocoa's `y` goes up from the primary display's bottom, nsh's down
+    // from its top. The pointer can sit on a display's far edge, so the
+    // edges count.
+    let (x, y) = (px(x as f32), px(primary.bounds.size.height.0 - y as f32));
+    displays
+        .iter()
+        .find(|d| {
+            let b = &d.bounds;
+            b.left() <= x && x <= b.right() && b.top() <= y && y <= b.bottom()
+        })
+        .map(|d| d.id)
 }
 
 fn popup_content(launcher: Launcher) -> impl IntoElement {

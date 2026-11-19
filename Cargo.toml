@@ -32,7 +32,7 @@ version = "0.6.2"
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
 version = "0.3.2"
-features = ["block2", "NSPasteboard", "NSRunningApplication", "NSWorkspace", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext", "objc2-core-graphics"]
+features = ["block2", "NSEvent", "NSPasteboard", "NSRunningApplication", "NSWorkspace", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext", "objc2-core-graphics"]
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-foundation]
 version = "0.3.2"
