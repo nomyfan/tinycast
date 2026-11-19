@@ -198,7 +198,8 @@ pub fn App() -> impl IntoElement {
     // The global shortcuts, registered again when the config changes them:
     // the effect's cleanup gives the previous ones back first.
     let hotkeys = computed(move || launcher.settings.with(|s| s.config.hotkeys.clone()));
-    // Keystrokes the system would not give: another app holds them.
+    // Why the system would not give a keystroke: Spotlight or another app
+    // holds it.
     let held = signal(Vec::<String>::new());
     effect(move || {
         let hotkeys = hotkeys.get();
@@ -210,10 +211,15 @@ pub fn App() -> impl IntoElement {
                 // succeeds, and Spotlight still gets the key.
                 let spotlight = is_cmd_space(&key)
                     && blocking(mac::spotlight_takes_cmd_space).await.unwrap_or(false);
-                if !taken.await || spotlight {
-                    log::warn!("{key} is held by {}", if spotlight { "Spotlight" } else { "another app" });
-                    held.update(|h| h.push(key));
-                }
+                let problem = if spotlight {
+                    format!("{key} is held by Spotlight: turn its shortcut off in System Settings")
+                } else if !taken.await {
+                    format!("{key} is held by another app")
+                } else {
+                    return;
+                };
+                log::warn!("{problem}");
+                held.update(|h| h.push(problem));
             });
         }
     });
@@ -221,13 +227,7 @@ pub fn App() -> impl IntoElement {
     // The tray, with what went wrong with the settings above its items.
     effect(move || {
         let mut problems = launcher.settings.with(|s| s.problems.clone());
-        problems.extend(held.get().into_iter().map(|key| {
-            if is_cmd_space(&key) {
-                format!("{key} is held by Spotlight: turn its shortcut off in System Settings")
-            } else {
-                format!("{key} is held by another app")
-            }
-        }));
+        problems.extend(held.get());
         let mut items: Vec<MenuItem> = problems
             .into_iter()
             .map(|problem| MenuItem::new(format!("⚠︎ {problem}")).disabled(true))
