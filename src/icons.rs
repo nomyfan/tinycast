@@ -22,6 +22,11 @@ pub const CLIPBOARD_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox
     <path d='M8.75 11h6.5M8.75 13.5h6.5M8.75 16h4' stroke='#F5525A' stroke-width='1.25' stroke-linecap='round'/>\
     </svg>";
 
+/// The menu bar icon, a tilted fishing bobber: a template, which macOS
+/// draws in the menu bar's text color. Its source and the app icon's are in
+/// `assets/icon/`.
+pub const TRAY_SVG: &str = include_str!("../assets/icon/tray-icon.svg");
+
 /// A left arrow, drawn in the color the image's tint gives it.
 pub const BACK_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' \
     fill='none' stroke='#000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'>\

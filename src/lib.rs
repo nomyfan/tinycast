@@ -252,7 +252,7 @@ pub fn App() -> impl IntoElement {
         ]);
         set_tray(
             tray()
-                .title([nsh_core::desktop::TrayTitleRun::new("TC")])
+                .icon(icons::svg_uri(icons::TRAY_SVG))
                 .tooltip("Tinycast")
                 .menu(items),
         );

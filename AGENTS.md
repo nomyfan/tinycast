@@ -52,6 +52,9 @@ scripts/build.sh              # the same, re-signed with a Keychain certificate 
   reload. Problems (bad TOML, bad keystroke, held shortcut) become disabled "⚠︎" items in the tray menu, and the
   setting keeps its default.
 
+Icons: `assets/icon/` (see its README). The tray icon is `tray-icon.svg`, embedded by `src/icons.rs` as a template;
+the app icon is `app-icon.png`, named by `nsh.json`'s `icon`. `assets/icon/generate.mjs` regenerates the SVGs.
+
 Data: `~/Library/Application Support/Tinycast/` (`history.json`, `images/`), icon cache in
 `~/Library/Caches/Tinycast/icons/`.
 

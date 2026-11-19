@@ -1,8 +1,9 @@
 {
   "name": "Tinycast",
   "id": "dev.callcc.tinycast",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "build": 1,
+  "icon": { "macos": "assets/icon/app-icon.png" },
   "rust": ".",
   "root": "App",
   "window": {

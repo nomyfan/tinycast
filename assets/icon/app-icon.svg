@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B2F34"/><stop offset="1" stop-color="#121417"/></linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.08"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <radialGradient id="shade" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></radialGradient>
+    <clipPath id="square"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <path d="M540.5 337 L 579.4 60" clip-path="url(#square)" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round"/>
+  <g transform="translate(512 540) rotate(8)">
+    <path d="M-205 0A205 205 0 0 1 205 0Z" fill="#FFFFFF"/>
+    <path d="M-205 0A205 205 0 0 0 205 0Z" fill="#F86044"/>
+    <circle r="205" fill="url(#shade)"/>
+  </g>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#gloss)"/>
+</svg>
