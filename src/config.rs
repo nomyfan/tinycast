@@ -2,12 +2,15 @@
 //! and again whenever it is saved.
 
 use std::{
+    collections::{BTreeMap, HashSet},
     path::PathBuf,
     time::{Duration, SystemTime},
 };
 
 use nsh_core::{desktop::Shortcut, prelude::*};
 use serde::Deserialize;
+
+use crate::window;
 
 /// What a new config file says: every setting, at its default.
 const TEMPLATE: &str = r#"# Tinycast settings. Saved changes apply at once.
@@ -20,12 +23,26 @@ const TEMPLATE: &str = r#"# Tinycast settings. Saved changes apply at once.
 # Keyboard › Keyboard Shortcuts › Spotlight › "Show Spotlight search".
 launcher = "alt+space"
 clipboard = "alt+shift+v"
+
+[window]
+# Global shortcuts of the window commands, none by default. The commands:
+# left-half, right-half, top-half, bottom-half, top-left-quarter,
+# top-right-quarter, bottom-left-quarter, bottom-right-quarter, first-third,
+# center-third, last-third, first-two-thirds, last-two-thirds, maximize,
+# almost-maximize, center, reasonable-size, restore, next-display,
+# previous-display, toggle-fullscreen.
+#
+# left-half = "ctrl+alt+left"
+# right-half = "ctrl+alt+right"
+# maximize = "ctrl+alt+enter"
 "#;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub hotkeys: Hotkeys,
+    /// The window commands' global shortcuts.
+    pub window: BTreeMap<window::Command, String>,
 }
 
 /// The global shortcuts, as `register_global_shortcut` takes them.
@@ -40,7 +57,7 @@ pub struct Hotkeys {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { hotkeys: Hotkeys::default() }
+        Config { hotkeys: Hotkeys::default(), window: BTreeMap::new() }
     }
 }
 
@@ -114,6 +131,21 @@ fn parse(text: &str) -> Loaded {
         problems.push("hotkeys.launcher and hotkeys.clipboard are the same keystroke".into());
         config.hotkeys.clipboard = defaults.clipboard;
     }
+    let mut taken: HashSet<Shortcut> = [&config.hotkeys.launcher, &config.hotkeys.clipboard]
+        .into_iter()
+        .filter_map(|keys| Shortcut::parse(keys, true).ok())
+        .collect();
+    config.window.retain(|command, keys| {
+        let name = command.id();
+        match Shortcut::parse(keys, true) {
+            Err(error) => problems.push(format!("window.{name} \"{keys}\" is not a keystroke ({error})")),
+            Ok(shortcut) if !taken.insert(shortcut) => {
+                problems.push(format!("window.{name} \"{keys}\" is already another shortcut"))
+            }
+            Ok(_) => return true,
+        }
+        false
+    });
     Loaded { config, problems }
 }
 
@@ -154,6 +186,35 @@ mod tests {
         let loaded = parse("[hotkeys]\nlauncher = \"cmd+space\"\n");
         assert_eq!(loaded.config.hotkeys.launcher, "cmd+space");
         assert!(loaded.problems.is_empty());
+    }
+
+    #[test]
+    fn the_template_names_every_window_command() {
+        for command in window::Command::ALL {
+            assert!(TEMPLATE.contains(command.id()), "{}", command.id());
+        }
+    }
+
+    #[test]
+    fn window_shortcuts_are_read() {
+        let loaded = parse("[window]\nleft-half = \"ctrl+alt+left\"\n");
+        assert_eq!(loaded.config.window[&window::Command::LeftHalf], "ctrl+alt+left");
+        assert!(loaded.problems.is_empty());
+    }
+
+    #[test]
+    fn a_window_shortcut_taken_twice_is_dropped() {
+        let loaded = parse(
+            "[window]\nleft-half = \"alt+space\"\nright-half = \"ctrl+alt+l\"\n\
+             maximize = \"ctrl+alt+L\"\n",
+        );
+        assert_eq!(loaded.config.window.len(), 1);
+        assert_eq!(loaded.problems.len(), 2);
+    }
+
+    #[test]
+    fn an_unknown_window_command_is_reported() {
+        assert_eq!(parse("[window]\nleft-halve = \"ctrl+alt+left\"\n").problems.len(), 1);
     }
 
     #[test]

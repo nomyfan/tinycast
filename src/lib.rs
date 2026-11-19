@@ -10,6 +10,7 @@ mod clipboard_view;
 mod config;
 mod icons;
 mod mac;
+mod window;
 
 use std::{collections::HashSet, time::Duration};
 
@@ -38,6 +39,13 @@ fn native(registry: &mut Registry) {
 enum Mode {
     Apps,
     Clipboard,
+}
+
+/// What a global shortcut does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Action {
+    Show(Mode),
+    Window(window::Command),
 }
 
 /// What the popup shows, shared by the shortcuts, the tray and the popup.
@@ -138,12 +146,8 @@ impl Launcher {
             return log::warn!("the entry's image file is gone");
         }
         self.close();
-        if !mac::can_post_keys() {
-            log::warn!("Tinycast needs Accessibility access to paste; the text is on the clipboard");
-            drop(open_url(
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-            ));
-            return;
+        if !accessibility_granted() {
+            return log::warn!("Tinycast needs Accessibility access to paste; the text is on the clipboard");
         }
         // On a thread of its own: the popup's owner goes with the popup.
         blocking(|| {
@@ -165,6 +169,25 @@ impl Launcher {
         self.close();
         mac::launch_app(path);
     }
+
+    fn run(self, action: Action) {
+        match action {
+            Action::Show(mode) => self.toggle(mode),
+            Action::Window(command) => window::run(command),
+        }
+    }
+}
+
+/// Whether Tinycast has Accessibility access, opening its pane in System
+/// Settings when it has not.
+pub(crate) fn accessibility_granted() -> bool {
+    if mac::has_accessibility_access() {
+        return true;
+    }
+    drop(open_url(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+    ));
+    false
 }
 
 /// The application's root: the hidden main window's content, which keeps
@@ -201,15 +224,23 @@ pub fn App() -> impl IntoElement {
 
     // The global shortcuts, registered again when the config changes them:
     // the effect's cleanup gives the previous ones back first.
-    let hotkeys = computed(move || launcher.settings.with(|s| s.config.hotkeys.clone()));
+    let hotkeys = computed(move || {
+        launcher.settings.with(|s| {
+            let mut hotkeys = vec![
+                (s.config.hotkeys.launcher.clone(), Action::Show(Mode::Apps)),
+                (s.config.hotkeys.clipboard.clone(), Action::Show(Mode::Clipboard)),
+            ];
+            hotkeys.extend(s.config.window.iter().map(|(&command, keys)| (keys.clone(), Action::Window(command))));
+            hotkeys
+        })
+    });
     // Why the system would not give a keystroke: Spotlight or another app
     // holds it.
     let held = signal(Vec::<String>::new());
     effect(move || {
-        let hotkeys = hotkeys.get();
         held.set(Vec::new());
-        for (key, mode) in [(hotkeys.launcher, Mode::Apps), (hotkeys.clipboard, Mode::Clipboard)] {
-            let taken = register_global_shortcut(&key, move || launcher.toggle(mode));
+        for (key, action) in hotkeys.get() {
+            let taken = register_global_shortcut(&key, move || launcher.run(action));
             // Ends with the effect's run, giving a shared hot key back.
             spawn(async move {
                 let report = |problem: String| {
@@ -244,7 +275,7 @@ pub fn App() -> impl IntoElement {
                 };
                 log::info!("{key} is shared with another app");
                 while presses.recv().await.is_some() {
-                    launcher.toggle(mode);
+                    launcher.run(action);
                 }
             });
         }
@@ -343,6 +374,7 @@ fn popup_content(launcher: Launcher) -> impl IntoElement {
 }
 
 const CLIPBOARD_COMMAND: &str = "cmd:clipboard";
+const WINDOW_PREFIX: &str = "window:";
 
 fn app_palette(launcher: Launcher) -> impl IntoElement {
     let items = move || {
@@ -361,6 +393,17 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 .keywords(["paste", "剪贴板"])
                 .shortcut(launcher.settings.with(|s| s.config.hotkeys.clipboard.clone())),
         );
+        launcher.settings.with(|s| {
+            items.extend(window::Command::ALL.map(|command| {
+                let item = CommandItem::new(format!("{WINDOW_PREFIX}{}", command.id()), command.title())
+                    .group("Window Management")
+                    .keywords(["window", "窗口"]);
+                match s.config.window.get(&command) {
+                    Some(keys) => item.shortcut(keys.clone()),
+                    None => item,
+                }
+            }));
+        });
         items
     };
     palette(launcher)
@@ -372,18 +415,30 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 launcher.mode.set(Mode::Clipboard);
             } else if let Some(path) = id.strip_prefix("app:") {
                 launcher.launch(path);
+            } else if let Some(command) = id.strip_prefix(WINDOW_PREFIX).and_then(window::Command::from_id) {
+                launcher.close();
+                window::run(command);
             }
         })
         .on_cancel(move || launcher.close())
         .empty(text("No matches").app_class("py-6 text-center text-sm text-muted-foreground"))
         .render_item(move |entry: &CommandEntry| {
-            // The commands' rows (no `app:` id) show the clipboard glyph.
+            // The window commands' rows show their layout, the other
+            // commands' rows (no `app:` id) the clipboard glyph.
             let path = entry.id.strip_prefix("app:").map(str::to_owned);
+            let layout_icon = entry
+                .id
+                .strip_prefix(WINDOW_PREFIX)
+                .and_then(window::Command::from_id)
+                .map(|command| icons::svg_uri(&command.icon_svg()));
             let running = {
                 let path = path.clone();
                 move || path.as_ref().is_some_and(|p| launcher.running.with(|r| r.contains(p)))
             };
             let src = reactive_src(move || {
+                if layout_icon.is_some() {
+                    return layout_icon.clone();
+                }
                 let path = path.as_deref()?;
                 launcher.apps.with(|apps| {
                     apps.iter().find(|a| a.path == path).and_then(|a| a.icon.clone())

@@ -43,12 +43,20 @@ scripts/build.sh              # the same, re-signed with a Keychain certificate 
 - **`src/mac.rs` holds every AppKit/CoreGraphics call nsh has no API for** (objc2 0.6 / objc2-app-kit 0.3, the
   versions nsh-platform-macos uses): pasteboard change count, text and images, concealed-type check, frontmost and
   running apps, localized app names, icons as PNG, launching apps (`open_path` blocks the main thread until the app
-  has started), posting ⌘V, Spotlight's ⌘Space setting, global shortcuts shared with another app
-  (`src/mac/shared_hotkey.rs`).
+  has started), posting ⌘V, moving other apps' windows (`AxWindow`), Spotlight's ⌘Space setting, global shortcuts
+  shared with another app (`src/mac/shared_hotkey.rs`).
 - **Clipboard history** (`src/clipboard.rs`): macOS has no clipboard-changed event, so `watch` polls
   `NSPasteboard.changeCount` every 400 ms. Text goes in `history.json`; images are PNGs named by content hash in
   `images/`; unpinned entries past 200 or deleted take their image files with them. Pinned entries (⇧⌘P) list
   first and are spared by the limit and by "Delete Entries…"/"Delete All Entries…".
+- **Window management** (`src/window.rs`), Raycast's window commands: launcher rows (`window:<id>`) and optional
+  global shortcuts (config `[window]`). The layouts are pure functions over nsh's `displays()` `visible_bounds`
+  (top-left origin, as the Accessibility API's). `mac::AxWindow` moves the app in front's focused window through
+  `AXUIElement` on a `blocking` thread, since an app that doesn't answer stalls each call. Restore remembers the frame
+  from before the first command in a row, per window. A window just moved to another display is still held to the old
+  display's size for about 60 ms, so `place` keeps setting the frame until it takes. When checking display areas from
+  a script, note that `NSScreen.visibleFrame` in a process with no GUI connection (plain `osascript`) leaves out the
+  menu bars of displays other than the main one; call `NSApplication.sharedApplication` first.
 - **Settings** (`src/config.rs`): `~/.config/tinycast/config.toml` (written with defaults on first launch), polled
   for changes every second. Shortcuts are registered in an `effect` whose `cleanup` releases the previous ones on
   reload. Problems (bad TOML, bad keystroke, held shortcut) become disabled "⚠︎" items in the tray menu, and the

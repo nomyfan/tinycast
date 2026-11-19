@@ -1,13 +1,13 @@
 //! The macOS calls nsh has no API for: the pasteboard's change count and
-//! types, the frontmost app, localized app names, launching apps, and
-//! posting ⌘V, global shortcuts shared with another app.
+//! types, the frontmost app, localized app names, launching apps, posting
+//! ⌘V, other apps' windows, global shortcuts shared with another app.
 
 pub mod shared_hotkey;
 
 use std::ffi::c_void;
 
 use block2::RcBlock;
-use objc2::{AllocAnyThread, runtime::ProtocolObject};
+use objc2::{AllocAnyThread, rc::Retained, runtime::ProtocolObject};
 use objc2_app_kit::{
     NSBitmapImageFileType, NSBitmapImageRep, NSEvent, NSImage, NSPasteboard, NSPasteboardTypePNG,
     NSPasteboardTypeString, NSPasteboardTypeTIFF, NSRunningApplication, NSWorkspace,
@@ -16,6 +16,8 @@ use objc2_app_kit::{
 use objc2_foundation::{
     NSArray, NSDictionary, NSError, NSFileManager, NSPoint, NSRect, NSSize, NSString, NSURL,
 };
+
+use crate::window::Rect;
 
 /// Types password managers and similar apps mark their copies with, so
 /// clipboard tools keep them out of the history (nspasteboard.org).
@@ -116,6 +118,11 @@ pub struct FrontApp {
     pub path: Option<String>,
 }
 
+/// The process of the app in front.
+pub fn frontmost_pid() -> Option<i32> {
+    Some(NSWorkspace::sharedWorkspace().frontmostApplication()?.processIdentifier())
+}
+
 pub fn frontmost_app() -> Option<FrontApp> {
     let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
     Some(FrontApp {
@@ -199,9 +206,16 @@ pub fn display_name(path: &str) -> String {
     name.strip_suffix(".app").map(str::to_owned).unwrap_or(name)
 }
 
+type CFTypeRef = *const c_void;
+
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
+    fn AXUIElementCreateApplication(pid: i32) -> CFTypeRef;
+    fn AXUIElementCopyAttributeValue(element: CFTypeRef, attribute: CFTypeRef, value: *mut CFTypeRef) -> i32;
+    fn AXUIElementSetAttributeValue(element: CFTypeRef, attribute: CFTypeRef, value: CFTypeRef) -> i32;
+    fn AXValueCreate(kind: u32, value: *const c_void) -> CFTypeRef;
+    fn AXValueGetValue(value: CFTypeRef, kind: u32, out: *mut c_void) -> bool;
 }
 
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -215,11 +229,14 @@ unsafe extern "C" {
 #[link(name = "CoreFoundation", kind = "framework")]
 unsafe extern "C" {
     fn CFRelease(object: *const c_void);
+    fn CFEqual(a: CFTypeRef, b: CFTypeRef) -> bool;
+    static kCFBooleanTrue: CFTypeRef;
+    static kCFBooleanFalse: CFTypeRef;
 }
 
-/// Whether the user has allowed this app to post key events (System
-/// Settings › Privacy & Security › Accessibility).
-pub fn can_post_keys() -> bool {
+/// Whether the user has allowed this app to post key events and move other
+/// apps' windows (System Settings › Privacy & Security › Accessibility).
+pub fn has_accessibility_access() -> bool {
     // SAFETY: takes nothing, reads the process's trust.
     unsafe { AXIsProcessTrusted() }
 }
@@ -246,5 +263,154 @@ pub fn post_paste() {
         if !source.is_null() {
             CFRelease(source);
         }
+    }
+}
+
+const AX_SUCCESS: i32 = 0;
+const AX_VALUE_CG_POINT: u32 = 1;
+const AX_VALUE_CG_SIZE: u32 = 2;
+
+/// A window of another app, through the Accessibility API (which needs
+/// [`has_accessibility_access`]).
+pub struct AxWindow {
+    app: CFTypeRef,
+    window: CFTypeRef,
+}
+
+// SAFETY: AXUIElements are CFTypes, usable and released on any thread.
+unsafe impl Send for AxWindow {}
+
+impl AxWindow {
+    /// The focused window of the app of process `pid`.
+    pub fn focused(pid: i32) -> Option<AxWindow> {
+        // SAFETY: the element made here is released on every path, or by
+        // `drop`.
+        unsafe {
+            let app = AXUIElementCreateApplication(pid);
+            if app.is_null() {
+                return None;
+            }
+            match copy_attribute(app, "AXFocusedWindow") {
+                Some(window) => Some(AxWindow { app, window }),
+                None => {
+                    CFRelease(app);
+                    None
+                }
+            }
+        }
+    }
+
+    /// Whether `self` and `other` are the same window.
+    pub fn same_as(&self, other: &AxWindow) -> bool {
+        // SAFETY: both are valid elements.
+        unsafe { CFEqual(self.window, other.window) }
+    }
+
+    pub fn frame(&self) -> Option<Rect> {
+        // SAFETY: the kinds match the values' types.
+        let (at, size) = unsafe {
+            (
+                ax_value(self.window, "AXPosition", AX_VALUE_CG_POINT, NSPoint::new(0.0, 0.0))?,
+                ax_value(self.window, "AXSize", AX_VALUE_CG_SIZE, NSSize::new(0.0, 0.0))?,
+            )
+        };
+        Some(Rect { x: at.x, y: at.y, w: size.width, h: size.height })
+    }
+
+    /// Moves and resizes it, as far as the app lets it.
+    pub fn set_frame(&self, frame: Rect) {
+        let at = NSPoint::new(frame.x, frame.y);
+        let size = NSSize::new(frame.w, frame.h);
+        // SAFETY: the kinds match the values' types.
+        unsafe {
+            // With it on (VoiceOver, or an app that asks for it), apps
+            // animate each change and drop the one after.
+            let enhanced = bool_attribute(self.app, "AXEnhancedUserInterface") == Some(true);
+            if enhanced {
+                set_bool_attribute(self.app, "AXEnhancedUserInterface", false);
+            }
+            // Sized first, to fit where it goes, and again after: on another
+            // display the app may have kept it smaller.
+            set_ax_value(self.window, "AXSize", AX_VALUE_CG_SIZE, &size);
+            set_ax_value(self.window, "AXPosition", AX_VALUE_CG_POINT, &at);
+            set_ax_value(self.window, "AXSize", AX_VALUE_CG_SIZE, &size);
+            if enhanced {
+                set_bool_attribute(self.app, "AXEnhancedUserInterface", true);
+            }
+        }
+    }
+
+    pub fn is_fullscreen(&self) -> bool {
+        // SAFETY: a valid element.
+        unsafe { bool_attribute(self.window, "AXFullScreen") == Some(true) }
+    }
+
+    pub fn set_fullscreen(&self, on: bool) {
+        // SAFETY: a valid element.
+        unsafe { set_bool_attribute(self.window, "AXFullScreen", on) }
+    }
+}
+
+impl Drop for AxWindow {
+    fn drop(&mut self) {
+        // SAFETY: both were made or copied (+1) for this value.
+        unsafe {
+            CFRelease(self.window);
+            CFRelease(self.app);
+        }
+    }
+}
+
+/// `element`'s `attribute`, retained (+1), or `None` when it has none.
+unsafe fn copy_attribute(element: CFTypeRef, attribute: &str) -> Option<CFTypeRef> {
+    let name = NSString::from_str(attribute);
+    let mut value: CFTypeRef = std::ptr::null();
+    // SAFETY: NSString is toll-free bridged with CFString; `value` is
+    // written only on success.
+    let error = unsafe { AXUIElementCopyAttributeValue(element, Retained::as_ptr(&name).cast(), &mut value) };
+    (error == AX_SUCCESS && !value.is_null()).then_some(value)
+}
+
+/// `element`'s `attribute`, an AXValue of `kind` read into `out`.
+unsafe fn ax_value<T>(element: CFTypeRef, attribute: &str, kind: u32, mut out: T) -> Option<T> {
+    // SAFETY: the caller passes a `kind` of `T`'s layout; `value` is released.
+    unsafe {
+        let value = copy_attribute(element, attribute)?;
+        let read = AXValueGetValue(value, kind, (&raw mut out).cast());
+        CFRelease(value);
+        read.then_some(out)
+    }
+}
+
+unsafe fn set_ax_value<T>(element: CFTypeRef, attribute: &str, kind: u32, value: &T) {
+    let name = NSString::from_str(attribute);
+    // SAFETY: the caller passes a `kind` of `T`'s layout; the AXValue made
+    // here is released.
+    unsafe {
+        let value = AXValueCreate(kind, (value as *const T).cast());
+        if value.is_null() {
+            return;
+        }
+        AXUIElementSetAttributeValue(element, Retained::as_ptr(&name).cast(), value);
+        CFRelease(value);
+    }
+}
+
+unsafe fn bool_attribute(element: CFTypeRef, attribute: &str) -> Option<bool> {
+    // SAFETY: `value` is released; kCFBooleanTrue is an immutable constant.
+    unsafe {
+        let value = copy_attribute(element, attribute)?;
+        let on = CFEqual(value, kCFBooleanTrue);
+        CFRelease(value);
+        Some(on)
+    }
+}
+
+unsafe fn set_bool_attribute(element: CFTypeRef, attribute: &str, on: bool) {
+    let name = NSString::from_str(attribute);
+    // SAFETY: immutable CoreFoundation constants, bridged name.
+    unsafe {
+        let value = if on { kCFBooleanTrue } else { kCFBooleanFalse };
+        AXUIElementSetAttributeValue(element, Retained::as_ptr(&name).cast(), value);
     }
 }
