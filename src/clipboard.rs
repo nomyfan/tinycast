@@ -81,7 +81,7 @@ impl ClipEntry {
     }
 }
 
-fn data_dir() -> PathBuf {
+pub(crate) fn data_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_default();
     PathBuf::from(home).join("Library/Application Support/Tinycast")
 }

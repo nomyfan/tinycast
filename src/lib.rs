@@ -10,6 +10,8 @@ mod clipboard_view;
 mod config;
 mod icons;
 mod mac;
+mod recent;
+mod search;
 mod window;
 
 use std::{collections::HashSet, time::Duration};
@@ -56,6 +58,9 @@ pub(crate) struct Launcher {
     /// show a dot.
     running: Signal<HashSet<String>>,
     pub(crate) history: Signal<Vec<ClipEntry>>,
+    /// When each launcher item was chosen lately: they list first, and a
+    /// search ranks them higher.
+    recent: Signal<recent::Recent>,
     /// The user's settings (`config.toml`).
     settings: Signal<config::Loaded>,
     pub(crate) mode: Signal<Mode>,
@@ -198,6 +203,7 @@ pub fn App() -> impl IntoElement {
         apps: signal(Vec::new()),
         running: signal(HashSet::new()),
         history: signal(clipboard::load()),
+        recent: signal(recent::load()),
         settings: signal(config::load()),
         mode: signal(Mode::Apps),
         nested: stored(false),
@@ -377,6 +383,9 @@ const CLIPBOARD_COMMAND: &str = "cmd:clipboard";
 const WINDOW_PREFIX: &str = "window:";
 
 fn app_palette(launcher: Launcher) -> impl IntoElement {
+    // The query is the app's: `Command` only matches substrings, so the
+    // items come ranked by `search::rank` and it shows them unfiltered.
+    let query = signal(SharedString::default());
     let items = move || {
         let mut items: Vec<CommandItem> = launcher.apps.with(|apps| {
             apps.iter()
@@ -404,12 +413,24 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 }
             }));
         });
-        items
+        let now = recent::now();
+        query.with(|q| {
+            launcher.recent.with(|recent| {
+                if q.trim().is_empty() {
+                    return recent::recent_first(items, recent, now);
+                }
+                search::rank(items, q, |id| recent.get(id).map_or(0, |times| recent::bonus(times, now)))
+            })
+        })
     };
     palette(launcher)
         .items(items)
+        .filterable(false)
+        .query(move || Some(query.get()))
+        .on_query_change(move |q: &SharedString| query.set(q.clone()))
         .placeholder("Search apps and commands…")
         .on_select(move |id: &SharedString| {
+            recent::record(launcher.recent, id);
             if id.as_ref() == CLIPBOARD_COMMAND {
                 launcher.nested.replace(true);
                 launcher.mode.set(Mode::Clipboard);
