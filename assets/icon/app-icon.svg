@@ -1,16 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B2F34"/><stop offset="1" stop-color="#121417"/></linearGradient>
-    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.08"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
-    <radialGradient id="shade" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></radialGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#292D34"/><stop offset="1" stop-color="#0E1014"/></linearGradient>
+    <radialGradient id="bg-spot" cx=".48" cy=".42" r=".58"><stop offset="0" stop-color="#424956" stop-opacity=".58"/><stop offset=".6" stop-color="#23272E" stop-opacity=".18"/><stop offset="1" stop-color="#0E1014" stop-opacity="0"/></radialGradient>
+    <radialGradient id="coral-glow" cx="526" cy="635" r="325" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F86044" stop-opacity=".16"/><stop offset=".55" stop-color="#F86044" stop-opacity=".05"/><stop offset="1" stop-color="#F86044" stop-opacity="0"/></radialGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.09"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="bevel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".24"/><stop offset=".35" stop-color="#fff" stop-opacity=".05"/><stop offset=".85" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".05"/></linearGradient>
+    <radialGradient id="top-sphere" cx="-72" cy="-102" r="319.8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".48" stop-color="#FAFBFC"/><stop offset=".75" stop-color="#DCE2EA"/><stop offset=".90" stop-color="#B8C1CE"/><stop offset="1" stop-color="#9CA6B5"/></radialGradient>
+    <radialGradient id="bot-sphere" cx="-76" cy="-70" r="328" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF8C72"/><stop offset=".36" stop-color="#F86044"/><stop offset=".72" stop-color="#D13922"/><stop offset=".90" stop-color="#A62615"/><stop offset="1" stop-color="#8C1D0F"/></radialGradient>
+    <linearGradient id="line-grad" x1="-5" y1="0" x2="5" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#DCE2EA"/><stop offset=".30" stop-color="#FFFFFF"/><stop offset=".68" stop-color="#E4E9F0"/><stop offset="1" stop-color="#9CA6B4"/></linearGradient>
+    <radialGradient id="shadow-bobber" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#000000" stop-opacity=".72"/><stop offset=".54" stop-color="#000000" stop-opacity=".64"/><stop offset=".69" stop-color="#000000" stop-opacity=".42"/><stop offset=".80" stop-color="#000000" stop-opacity=".20"/><stop offset=".90" stop-color="#000000" stop-opacity=".06"/><stop offset="1" stop-color="#000000" stop-opacity="0"/></radialGradient>
     <clipPath id="square"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <clipPath id="bobber-clip"><circle r="205"/></clipPath>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
-  <path d="M540.5 337 L 579.4 60" clip-path="url(#square)" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round"/>
-  <g transform="translate(512 540) rotate(8)">
-    <path d="M-205 0A205 205 0 0 1 205 0Z" fill="#FFFFFF"/>
-    <path d="M-205 0A205 205 0 0 0 205 0Z" fill="#F86044"/>
-    <circle r="205" fill="url(#shade)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg-spot)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#coral-glow)"/>
+  <g clip-path="url(#square)">
+    <circle cx="512" cy="544" r="285" fill="none" stroke="#FFFFFF" stroke-opacity="0.045" stroke-width="1.5"/>
+    <circle cx="512" cy="544" r="365" fill="none" stroke="#FFFFFF" stroke-opacity="0.025" stroke-width="1.5"/>
+  </g>
+  <g clip-path="url(#square)">
+    <g transform="translate(517 551) rotate(8)">
+      <line x1="0" y1="-199" x2="0" y2="-479" stroke="#000000" stroke-opacity="0.025" stroke-width="14" stroke-linecap="round"/>
+      <line x1="0" y1="-199" x2="0" y2="-479" stroke="#000000" stroke-opacity="0.025" stroke-width="12" stroke-linecap="round"/>
+      <line x1="0" y1="-199" x2="0" y2="-479" stroke="#000000" stroke-opacity="0.025" stroke-width="10" stroke-linecap="round"/>
+      <line x1="0" y1="-199" x2="0" y2="-479" stroke="#000000" stroke-opacity="0.025" stroke-width="8" stroke-linecap="round"/>
+      <line x1="0" y1="-199" x2="0" y2="-479" stroke="#000000" stroke-opacity="0.025" stroke-width="6" stroke-linecap="round"/>
+      <line x1="0" y1="-199" x2="0" y2="-479" stroke="#000000" stroke-opacity="0.025" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <circle cx="526" cy="572" r="280" fill="url(#shadow-bobber)"/>
+  </g>
+  <g clip-path="url(#square)">
+    <g transform="translate(512 544) rotate(8)">
+      <path d="M-5 -479 L5 -479 L5 -199 L-5 -199 Z" fill="url(#line-grad)"/>
+    </g>
+  </g>
+  <g transform="translate(512 544) rotate(8)">
+    <g clip-path="url(#bobber-clip)">
+      <path d="M-205 0A205 205 0 0 1 205 0Z" fill="url(#top-sphere)"/>
+      <path d="M-205 0A205 205 0 0 0 205 0Z" fill="url(#bot-sphere)"/>
+      <line x1="-205" y1="1.2" x2="205" y2="1.2" stroke="#6E150B" stroke-opacity="0.32" stroke-width="2.4"/>
+      <line x1="-205" y1="-0.8" x2="205" y2="-0.8" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1.5"/>
+    </g>
   </g>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#gloss)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="url(#bevel)" stroke-width="3"/>
 </svg>

@@ -1,6 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B2F34"/><stop offset="1" stop-color="#121417"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#292D34"/><stop offset="1" stop-color="#0E1014"/></linearGradient>
+    <radialGradient id="bg-spot" cx=".48" cy=".42" r=".58"><stop offset="0" stop-color="#424956" stop-opacity=".58"/><stop offset=".6" stop-color="#23272E" stop-opacity=".18"/><stop offset="1" stop-color="#0E1014" stop-opacity="0"/></radialGradient>
+    <radialGradient id="coral-glow" cx="526" cy="635" r="325" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F86044" stop-opacity=".16"/><stop offset=".55" stop-color="#F86044" stop-opacity=".05"/><stop offset="1" stop-color="#F86044" stop-opacity="0"/></radialGradient>
+    <clipPath id="square"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg-spot)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#coral-glow)"/>
+  <g clip-path="url(#square)">
+    <circle cx="512" cy="544" r="285" fill="none" stroke="#FFFFFF" stroke-opacity="0.045" stroke-width="1.5"/>
+    <circle cx="512" cy="544" r="365" fill="none" stroke="#FFFFFF" stroke-opacity="0.025" stroke-width="1.5"/>
+  </g>
 </svg>

@@ -1,6 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
+    <linearGradient id="line-grad" x1="-5" y1="0" x2="5" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#DCE2EA"/><stop offset=".30" stop-color="#FFFFFF"/><stop offset=".68" stop-color="#E4E9F0"/><stop offset="1" stop-color="#9CA6B4"/></linearGradient>
     <clipPath id="square"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
   </defs>
-  <path d="M540.5 337 L 579.4 60" clip-path="url(#square)" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="14" stroke-linecap="round"/>
+  <g clip-path="url(#square)">
+    <g transform="translate(512 544) rotate(8)">
+      <path d="M-5 -479 L5 -479 L5 -199 L-5 -199 Z" fill="url(#line-grad)"/>
+    </g>
+  </g>
 </svg>

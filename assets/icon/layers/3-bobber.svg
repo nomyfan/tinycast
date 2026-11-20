@@ -1,10 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <radialGradient id="shade" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></radialGradient>
+    <radialGradient id="top-sphere" cx="-72" cy="-102" r="319.8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".48" stop-color="#FAFBFC"/><stop offset=".75" stop-color="#DCE2EA"/><stop offset=".90" stop-color="#B8C1CE"/><stop offset="1" stop-color="#9CA6B5"/></radialGradient>
+    <radialGradient id="bot-sphere" cx="-76" cy="-70" r="328" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF8C72"/><stop offset=".36" stop-color="#F86044"/><stop offset=".72" stop-color="#D13922"/><stop offset=".90" stop-color="#A62615"/><stop offset="1" stop-color="#8C1D0F"/></radialGradient>
+    <clipPath id="bobber-clip"><circle r="205"/></clipPath>
   </defs>
-  <g transform="translate(512 540) rotate(8)">
-    <path d="M-205 0A205 205 0 0 1 205 0Z" fill="#FFFFFF"/>
-    <path d="M-205 0A205 205 0 0 0 205 0Z" fill="#F86044"/>
-    <circle r="205" fill="url(#shade)"/>
+  <g transform="translate(512 544) rotate(8)">
+    <g clip-path="url(#bobber-clip)">
+      <path d="M-205 0A205 205 0 0 1 205 0Z" fill="url(#top-sphere)"/>
+      <path d="M-205 0A205 205 0 0 0 205 0Z" fill="url(#bot-sphere)"/>
+      <line x1="-205" y1="1.2" x2="205" y2="1.2" stroke="#6E150B" stroke-opacity="0.32" stroke-width="2.4"/>
+      <line x1="-205" y1="-0.8" x2="205" y2="-0.8" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="1.5"/>
+    </g>
   </g>
 </svg>
