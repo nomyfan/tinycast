@@ -2256,6 +2256,7 @@ dependencies = [
  "block2",
  "dispatch2",
  "env_logger",
+ "libc",
  "log",
  "nsh-base",
  "nsh-core",

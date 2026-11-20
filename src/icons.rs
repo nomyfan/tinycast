@@ -22,6 +22,17 @@ pub const CLIPBOARD_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox
     <path d='M8.75 11h6.5M8.75 13.5h6.5M8.75 16h4' stroke='#F5525A' stroke-width='1.25' stroke-linecap='round'/>\
     </svg>";
 
+/// A terminal prompt on a slate tile, drawn as app icons are: for scripts
+/// without an icon of their own.
+pub const SCRIPT_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>\
+    <defs><linearGradient id='bg' x1='0' y1='0' x2='0' y2='1'>\
+    <stop offset='0' stop-color='#5B6472'/><stop offset='1' stop-color='#2E333B'/>\
+    </linearGradient></defs>\
+    <rect x='1' y='1' width='22' height='22' rx='5.5' fill='url(#bg)'/>\
+    <path d='M7 8.5l3.5 3.5L7 15.5M12.5 16h4.5' fill='none' stroke='#FFFFFF' stroke-width='1.8' \
+    stroke-linecap='round' stroke-linejoin='round'/>\
+    </svg>";
+
 /// The menu bar icon, a tilted fishing bobber: a template, which macOS
 /// draws in the menu bar's text color. Its source and the app icon's are in
 /// `assets/icon/`.
