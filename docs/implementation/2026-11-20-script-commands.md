@@ -183,4 +183,4 @@ pub fn script_view(launcher: Launcher, script: Script) -> impl IntoElement;
 - A silent script that succeeds without output shows no HUD (was "✓ <name>"): one that opens a window, as most do, has nothing to say, and a script that wants a confirmation prints one.
 
 ## Status
-Checked in the app: the scripts list and icons, a silent script's HUD (frosted glass, as the popup), Slow Output stopped with nothing left running when going back. Not yet checked: Count to 5000 after the `Run` fix, the HUD not taking the keyboard from the app in front, two HUDs in a row, `.env`'s PATH.
+Checked in the app: the scripts list and icons, a silent script's HUD (frosted glass, as the popup), Slow Output stopped with nothing left running when going back, `.env`'s PATH (Nix's folders first, `$HOME` and `$USER` expanded, taken without a restart). CI passes on macOS 15. Not yet checked: Count to 5000 after the `Run` fix, the HUD not taking the keyboard from the app in front, two HUDs in a row.
