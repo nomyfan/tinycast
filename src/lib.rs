@@ -8,9 +8,13 @@ mod apps;
 mod clipboard;
 mod clipboard_view;
 mod config;
+mod dotenv;
+mod hud;
 mod icons;
 mod mac;
 mod recent;
+mod script_view;
+mod scripts;
 mod search;
 mod window;
 
@@ -19,7 +23,7 @@ use std::{collections::HashSet, time::Duration};
 use nsh_base::{Command, CommandApi, CommandEntry, CommandItem, button, command, theme};
 use nsh_core::{
     MacOsBackdrop, MacOsBackdropBlending, MacOsBackdropMaterial, MacOsBackdropState,
-    desktop::{DisplayId, Key, Shortcut, WindowAttributes, WindowKind, WindowPosition},
+    desktop::{Display, Key, Shortcut, WindowAttributes, WindowKind, WindowPosition},
     element::{AdaptiveColor, ImageSrc},
     element::desktop::{
         MenuItem, WindowRef, current_window, displays, open_window, quit,
@@ -28,7 +32,12 @@ use nsh_core::{
     prelude::*,
 };
 
-use crate::{apps::AppEntry, clipboard::ClipEntry, mac::shared_hotkey::SharedHotKey};
+use crate::{
+    apps::AppEntry,
+    clipboard::ClipEntry,
+    mac::shared_hotkey::SharedHotKey,
+    scripts::{OutputMode, Outcome, Script, ScriptIcon},
+};
 
 
 /// The app's UI set (`nsh.json` `"rust"`).
@@ -41,6 +50,8 @@ fn native(registry: &mut Registry) {
 enum Mode {
     Apps,
     Clipboard,
+    /// The output of `Launcher::script`, as it runs.
+    Output,
 }
 
 /// What a global shortcut does.
@@ -61,15 +72,22 @@ pub(crate) struct Launcher {
     /// When each launcher item was chosen lately: they list first, and a
     /// search ranks them higher.
     recent: Signal<recent::Recent>,
-    /// The user's settings (`config.toml`).
+    /// The user's settings (`config.toml`, `.env`).
     settings: Signal<config::Loaded>,
+    /// The scripts folder's, as of the popup's opening.
+    scripts: Signal<Vec<Script>>,
+    /// The script `Mode::Output` runs.
+    script: Stored<Option<Script>>,
     pub(crate) mode: Signal<Mode>,
-    /// The clipboard view was entered from the launcher's list, so Escape
-    /// goes back to it rather than closing the popup.
+    /// The clipboard or output view was entered from the launcher's list,
+    /// so Escape goes back to it rather than closing the popup.
     pub(crate) nested: Stored<bool>,
     pub(crate) popup: Stored<Option<WindowRef>>,
     /// The palette the popup shows, whichever mode.
     pub(crate) search: ComponentRef<Command>,
+    hud: hud::Hud,
+    /// The app's root's: what must outlive the popup runs under it.
+    owner: Owner,
 }
 
 impl Launcher {
@@ -84,6 +102,7 @@ impl Launcher {
         self.mode.set(mode);
         self.nested.replace(false);
         self.running.set(mac::running_app_paths());
+        self.rescan_scripts();
         if let Some(popup) = open {
             popup.focus();
             return;
@@ -111,7 +130,7 @@ impl Launcher {
         // Without a display the popup opens on the hidden main window's,
         // always the same one.
         if let Some(display) = mouse_display() {
-            options = options.display(display);
+            options = options.display(display.id);
         }
         let popup = open_window(options);
         self.popup.replace(popup);
@@ -181,6 +200,66 @@ impl Launcher {
             Action::Window(command) => window::run(command),
         }
     }
+
+    /// Lists the scripts folder again, off the engine thread.
+    fn rescan_scripts(self) {
+        self.owner.run(|| {
+            spawn(async move {
+                let Ok(found) = blocking(scripts::scan).await else { return };
+                if self.scripts.with_untracked(|scripts| *scripts != found) {
+                    self.scripts.set(found);
+                }
+            });
+        });
+    }
+
+    /// Runs the script of launcher row `id`: in the output view, or with
+    /// the popup closed and its last line of output in the HUD.
+    fn run_script(self, id: &str) {
+        let Some(script) = self.scripts.with_untracked(|s| s.iter().find(|s| s.id == id).cloned()) else {
+            return;
+        };
+        match script.mode {
+            OutputMode::Output => {
+                self.script.replace(Some(script));
+                self.nested.replace(true);
+                self.mode.set(Mode::Output);
+            }
+            OutputMode::Silent => {
+                self.close();
+                let env = self.settings.with_untracked(|s| s.env.clone());
+                // Under the root: the popup's owner goes with the popup, and
+                // the run with it.
+                self.owner.run(|| {
+                    spawn(async move {
+                        let mut run = scripts::start(&script, &env);
+                        let mut last_line = None;
+                        while let Some(line) = run.line().await {
+                            if !line.trim().is_empty() {
+                                last_line = Some(line);
+                            }
+                        }
+                        let outcome = run.outcome().await;
+                        if let Some((message, failed)) = hud_message(&script.name, last_line, outcome) {
+                            self.hud.show(&message, failed);
+                        }
+                    });
+                });
+            }
+        }
+    }
+}
+
+/// What the HUD says when a silent script ends, and whether it failed: its
+/// last line of output, and why when it failed. Nothing for a script that
+/// succeeded quietly (one that opens a window has nothing to add).
+fn hud_message(name: &str, last_line: Option<String>, outcome: Outcome) -> Option<(String, bool)> {
+    match (outcome, last_line) {
+        (Outcome::Succeeded, Some(line)) => Some((line, false)),
+        (Outcome::Succeeded, None) => None,
+        (Outcome::Failed(why), Some(line)) => Some((format!("{why}: {line}"), true)),
+        (Outcome::Failed(why), None) => Some((format!("{name}: {why}"), true)),
+    }
 }
 
 /// Whether Tinycast has Accessibility access, opening its pane in System
@@ -205,11 +284,16 @@ pub fn App() -> impl IntoElement {
         history: signal(clipboard::load()),
         recent: signal(recent::load()),
         settings: signal(config::load()),
+        scripts: signal(Vec::new()),
+        script: stored(None),
         mode: signal(Mode::Apps),
         nested: stored(false),
         popup: stored(None),
         search: component_ref(),
+        hud: hud::Hud::new(),
+        owner: Owner::current(),
     };
+    launcher.rescan_scripts();
 
     // The names first, then the icons, which take a while the first time.
     spawn(async move {
@@ -310,6 +394,18 @@ pub fn App() -> impl IntoElement {
                     }
                 });
             }),
+            MenuItem::new("Open Scripts Folder…").on_select(|| {
+                spawn(async move {
+                    // Made again, README and all, if it was deleted since the
+                    // launch.
+                    if let Ok(Err(error)) = blocking(scripts::make_dir).await {
+                        return log::warn!("could not make the scripts folder: {error}");
+                    }
+                    if let Err(error) = open_path(scripts::dir()).await {
+                        log::warn!("could not open the scripts folder: {error}");
+                    }
+                });
+            }),
             MenuItem::separator(),
             MenuItem::new("Quit Tinycast").on_select(quit),
         ]);
@@ -331,8 +427,8 @@ fn is_cmd_space(key: &str) -> bool {
     })
 }
 
-/// The display the mouse pointer is on, where the popup opens.
-fn mouse_display() -> Option<DisplayId> {
+/// The display the mouse pointer is on, where the popup and the HUD open.
+pub(crate) fn mouse_display() -> Option<Display> {
     let displays = displays();
     let primary = displays.iter().find(|d| d.primary)?;
     let (x, y) = mac::mouse_location();
@@ -346,8 +442,25 @@ fn mouse_display() -> Option<DisplayId> {
             let b = &d.bounds;
             b.left() <= x && x <= b.right() && b.top() <= y && y <= b.bottom()
         })
-        .map(|d| d.id)
+        .cloned()
 }
+
+/// Frosted glass, as Raycast and Spotlight: the popover material blurs what
+/// is behind the (transparent) window. Always active: Tinycast is never the
+/// active app, and an inactive material is flat gray. The popup and the HUD
+/// wear it, with `FROSTED_GLASS_CLASS`.
+pub(crate) fn frosted_glass() -> MacOsBackdrop {
+    let mut backdrop = MacOsBackdrop::default();
+    backdrop.material = MacOsBackdropMaterial::Popover;
+    backdrop.blending = MacOsBackdropBlending::BehindWindow;
+    backdrop.state = MacOsBackdropState::Active;
+    backdrop
+}
+
+/// Over `frosted_glass`: a thin wash of the theme's surface, which keeps
+/// text legible on busy backgrounds, and an edge, all that outlines a
+/// window without a shadow.
+pub(crate) const FROSTED_GLASS_CLASS: &str = "border border-foreground/10 bg-popover/55 text-popover-foreground";
 
 fn popup_content(launcher: Launcher) -> impl IntoElement {
     current_window().on_focus_change(move |focused| {
@@ -359,28 +472,19 @@ fn popup_content(launcher: Launcher) -> impl IntoElement {
         .flex_1()
         .rounded(px(14.0))
         .overflow_hidden()
-        // Frosted glass, as Raycast and Spotlight: the popover material blurs
-        // what is behind the (transparent) window, and a thin wash of the
-        // theme's surface keeps text legible on busy backgrounds. Always
-        // active: the popup's app is never the active one, and an inactive
-        // material is flat gray.
-        .macos_backdrop({
-            let mut backdrop = MacOsBackdrop::default();
-            backdrop.material = MacOsBackdropMaterial::Popover;
-            backdrop.blending = MacOsBackdropBlending::BehindWindow;
-            backdrop.state = MacOsBackdropState::Active;
-            backdrop
-        })
+        .macos_backdrop(frosted_glass())
         // The edge is all that outlines the popup: the window has no shadow.
-        .app_class("border border-foreground/10 bg-popover/55 text-popover-foreground")
+        .app_class(FROSTED_GLASS_CLASS)
         .child(dynamic(move || match launcher.mode.get() {
             Mode::Apps => app_palette(launcher).into_element(),
             Mode::Clipboard => clipboard_view::clipboard_view(launcher).into_element(),
+            Mode::Output => script_view::script_view(launcher).into_element(),
         }))
 }
 
 const CLIPBOARD_COMMAND: &str = "cmd:clipboard";
 const WINDOW_PREFIX: &str = "window:";
+const SCRIPT_PREFIX: &str = "script:";
 
 fn app_palette(launcher: Launcher) -> impl IntoElement {
     // The query is the app's: `Command` only matches substrings, so the
@@ -413,6 +517,14 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 }
             }));
         });
+        launcher.scripts.with(|scripts| {
+            items.extend(scripts.iter().map(|script| {
+                let file_stem = script.path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+                CommandItem::new(script.id.clone(), script.name.clone())
+                    .group("Scripts")
+                    .keywords([file_stem, "script".into(), "脚本".into()])
+            }));
+        });
         let now = recent::now();
         query.with(|q| {
             launcher.recent.with(|recent| {
@@ -428,7 +540,7 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
         .filterable(false)
         .query(move || Some(query.get()))
         .on_query_change(move |q: &SharedString| query.set(q.clone()))
-        .placeholder("Search apps and commands…")
+        .placeholder("Search apps, commands and scripts…")
         .on_select(move |id: &SharedString| {
             recent::record(launcher.recent, id);
             if id.as_ref() == CLIPBOARD_COMMAND {
@@ -439,13 +551,17 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
             } else if let Some(command) = id.strip_prefix(WINDOW_PREFIX).and_then(window::Command::from_id) {
                 launcher.close();
                 window::run(command);
+            } else if id.starts_with(SCRIPT_PREFIX) {
+                launcher.run_script(id);
             }
         })
         .on_cancel(move || launcher.close())
         .empty(text("No matches").app_class("py-6 text-center text-sm text-muted-foreground"))
         .render_item(move |entry: &CommandEntry| {
-            // The window commands' rows show their layout, the other
-            // commands' rows (no `app:` id) the clipboard glyph.
+            // The window commands' rows show their layout, the scripts' their
+            // own icon, the other commands' rows (no `app:` id) the clipboard
+            // glyph.
+            let script_id = entry.id.starts_with(SCRIPT_PREFIX).then(|| entry.id.to_string());
             let path = entry.id.strip_prefix("app:").map(str::to_owned);
             let layout_icon = entry
                 .id
@@ -474,7 +590,16 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                     // A dot under the icon of an app that is running, as
                     // Raycast and the Dock show it.
                     view()
-                        .child(row_icon(src))
+                        .child(match script_id {
+                            Some(id) => dynamic(move || {
+                                let icon = launcher.scripts.with(|scripts| {
+                                    scripts.iter().find(|s| s.id == id).map_or(ScriptIcon::Default, |s| s.icon.clone())
+                                });
+                                script_view::script_icon(icon)
+                            })
+                            .into_element(),
+                            None => row_icon(src).into_element(),
+                        })
                         .child(when(running, || {
                             view().app_class(
                                 "absolute left-[9.5px] -bottom-1.5 size-[3px] rounded-full \
@@ -537,4 +662,19 @@ pub(crate) fn styled(command: nsh_base::CommandElement) -> nsh_base::CommandElem
         .group_class("px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground")
         .separator_class("my-1 h-px bg-foreground/10")
         .item_class("group h-10 flex-row items-center rounded-md px-2.5 focus:bg-foreground/10")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_hud_says_the_last_line_and_why_it_failed_or_nothing() {
+        let line = || Some("Dark mode on".to_owned());
+        assert_eq!(hud_message("Dark", line(), Outcome::Succeeded), Some(("Dark mode on".into(), false)));
+        assert_eq!(hud_message("Dark", None, Outcome::Succeeded), None);
+        let failed = || Outcome::Failed("Exit code 1".into());
+        assert_eq!(hud_message("Dark", line(), failed()), Some(("Exit code 1: Dark mode on".into(), true)));
+        assert_eq!(hud_message("Dark", None, failed()), Some(("Dark: Exit code 1".into(), true)));
+    }
 }

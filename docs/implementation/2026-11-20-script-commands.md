@@ -154,16 +154,16 @@ pub fn script_view(launcher: Launcher, script: Script) -> impl IntoElement;
 - 打开 popup 时扫描：如果目录里有很大的非脚本文件，只读每个文件的前 4 KB 解析头部，所以影响不大。
 
 ## Implementation Roadmap
-- [ ] [risk validation] `hud.rs` + 托盘里加一个临时的 "Test HUD" 菜单项
+- [ ] [risk validation] `hud.rs`（没加临时菜单项，直接用 silent 脚本验证）
       Purpose：确认 Popup + `focusable: false` 不抢焦点、位置正确、2 秒后消失、连续触发时换文字而不是重开
       Verification：在别的 app 里打字时触发，输入不中断；HUD 出现在鼠标所在显示器的下方；1 秒内连点两次，第二条提示完整显示 2 秒；在另一块显示器上再触发，HUD 跟过去（需要你手动看，跑之前我会先问你）
-- [ ] [core logic] `dotenv.rs` + `config.rs` 读 `.env`
+- [x] [core logic] `dotenv.rs` + `config.rs` 读 `.env`
       Purpose：环境变量可配置，问题出现在托盘
       Verification：单元测试覆盖单引号 / 双引号 / 无引号、`export`、`$VAR` / `${VAR}` / `\$`、前面行的引用、`$HOME` 取自 base、行尾注释、坏行；`parse(TEMPLATE)` 的现有测试不变
-- [ ] [core logic] `scripts.rs`：`scan` 和头部解析
+- [x] [core logic] `scripts.rs`：`scan` 和头部解析
       Purpose：列表的数据
       Verification：单元测试覆盖默认值、`#` / `//` / `--` 注释、`#!` 和声明之间有空行、遇到代码就停、icon 的几种写法、没有执行权限的文件和隐藏文件不列、符号链接能列
-- [ ] [core logic] `scripts.rs`：`start` / `Run`
+- [x] [core logic] `scripts.rs`：`start` / `Run`
       Purpose：运行、合并输出、结果、杀进程
       Verification：用临时脚本做单元测试：stdout/stderr 顺序、多字节字符和 `\t` 保留、退出码、`kill -9 $$` 得到 "Killed by signal 9"、没有执行权限、`sleep 100 &` 不会卡住且读线程会结束、没有换行的大块输出被截断、丢弃 `Run` 后子进程被杀
 - [ ] [integration] `lib.rs`：Scripts 分组、图标、silent 运行 + HUD、托盘 "Open Scripts Folder…"、目录和 README
@@ -172,4 +172,15 @@ pub fn script_view(launcher: Launcher, script: Script) -> impl IntoElement;
 - [ ] [integration] `script_view.rs` + `Mode::Output`
       Purpose：打通 output 流程
       Verification：运行 `seq 5000` 和一个每秒输出一行的脚本，看到输出陆续出现、界面不卡、状态变化；按 Escape 返回列表，搜索框有焦点，脚本被杀（`ps` 确认）
-- [ ] [docs] 更新 `AGENTS.md` 的架构部分（scripts、HUD、`.env`）
+- [x] [docs] 更新 `AGENTS.md` 的架构部分（scripts、HUD、`.env`）
+
+## Deviations from Design
+- `hud::show` is `Hud::show`, a method of a `Copy` struct made by the root: it keeps the window, the timer and the root's owner, so it can be called from any owner.
+- A script without `#!` does not fail: as from a terminal, `/bin/sh` runs it (the system's `execvp` fallback). The "no `#!`" failure is gone; the README says so.
+- The output view's text is `selectable`, so the output can be copied with the mouse; no copy shortcut.
+- `Run`'s `lines` / `done` are private behind `line()`, `line_now()` and `outcome(self)`: an `async move` block that used `run.lines` and `run.done` captured only those two fields (Rust 2021 captures disjoint fields), so the kill guard was dropped when `script_view` returned and every output script was killed at once ("Killed by signal 9"). With methods the block takes the whole `Run`.
+- `@icon` also takes any other path (with a `/`), shown with the icon Finder gives it through the apps' icon cache (`icons::ensure`): apps, and System Settings panes' `/System/Library/ExtensionKit/Extensions/*.appex`, whose icons are the sidebar's (the old `.prefPane`s only get a generic document icon).
+- A silent script that succeeds without output shows no HUD (was "✓ <name>"): one that opens a window, as most do, has nothing to say, and a script that wants a confirmation prints one.
+
+## Status
+Checked in the app: the scripts list and icons, a silent script's HUD (frosted glass, as the popup), Slow Output stopped with nothing left running when going back. Not yet checked: Count to 5000 after the `Run` fix, the HUD not taking the keyboard from the app in front, two HUDs in a row, `.env`'s PATH.

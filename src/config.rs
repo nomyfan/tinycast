@@ -10,7 +10,7 @@ use std::{
 use nsh_core::{desktop::Shortcut, prelude::*};
 use serde::Deserialize;
 
-use crate::window;
+use crate::{dotenv, window};
 
 /// What a new config file says: every setting, at its default.
 const TEMPLATE: &str = r#"# Tinycast settings. Saved changes apply at once.
@@ -35,6 +35,21 @@ clipboard = "alt+shift+v"
 # left-half = "ctrl+alt+left"
 # right-half = "ctrl+alt+right"
 # maximize = "ctrl+alt+enter"
+"#;
+
+/// What a new `.env` says: nothing but how to use it.
+const ENV_TEMPLATE: &str = r#"# Variables the scripts in ./scripts/ run with. Saved changes apply to the
+# next run.
+#
+# Tinycast starts scripts with /usr/local/bin and ~/.local/bin in front of
+# the PATH it was given, which has little more than /usr/bin and /bin. Add
+# where your package managers put their commands, in the order you want:
+#
+# PATH=/opt/homebrew/bin:/opt/homebrew/sbin:$PATH
+# PATH=$HOME/.nix-profile/bin:/etc/profiles/per-user/$USER/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:$PATH
+#
+# $NAME and ${NAME} take the value of an earlier line or of Tinycast's own
+# environment; values in single quotes are kept as they are.
 "#;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -72,36 +87,70 @@ impl Default for Hotkeys {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Loaded {
     pub config: Config,
+    /// The variables scripts run with, over Tinycast's own: always `PATH`,
+    /// then the `.env` file's.
+    pub env: Vec<(String, String)>,
     pub problems: Vec<String>,
 }
 
-pub fn path() -> PathBuf {
+/// The folder of the config and the scripts.
+pub fn dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_default();
-    PathBuf::from(home).join(".config/tinycast/config.toml")
+    PathBuf::from(home).join(".config/tinycast")
 }
 
-/// The config file's settings; writes the file with the defaults first
-/// when there is none, so there is one to edit.
+pub fn path() -> PathBuf {
+    dir().join("config.toml")
+}
+
+pub fn env_path() -> PathBuf {
+    dir().join(".env")
+}
+
+/// The config file's settings and the `.env` file's variables; writes each
+/// file first when there is none, so there is one to edit.
 pub fn load() -> Loaded {
-    let path = path();
-    let text = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
+    let mut loaded = match read_or_create(&path(), TEMPLATE) {
+        Ok(text) => parse(&text),
+        Err(error) => Loaded {
+            problems: vec![format!("Could not read the config: {error}")],
+            ..Loaded::default()
+        },
+    };
+    let path = script_path();
+    let text = read_or_create(&env_path(), ENV_TEMPLATE).unwrap_or_else(|error| {
+        loaded.problems.push(format!("Could not read .env: {error}"));
+        String::new()
+    });
+    let (vars, problems) =
+        dotenv::parse(&text, |name| if name == "PATH" { Some(path.clone()) } else { std::env::var(name).ok() });
+    loaded.env = vec![("PATH".to_owned(), path)];
+    loaded.env.extend(vars);
+    loaded.problems.extend(problems);
+    loaded
+}
+
+/// The text of `path`, written with `template` first when there is none.
+fn read_or_create(path: &std::path::Path, template: &str) -> std::io::Result<String> {
+    match std::fs::read_to_string(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let written = std::fs::create_dir_all(path.parent().unwrap())
-                .and_then(|()| std::fs::write(&path, TEMPLATE));
+            let written = std::fs::create_dir_all(dir()).and_then(|()| std::fs::write(path, template));
             if let Err(error) = written {
                 log::warn!("could not write {}: {error}", path.display());
             }
-            TEMPLATE.to_owned()
+            Ok(template.to_owned())
         }
-        Err(error) => {
-            return Loaded {
-                config: Config::default(),
-                problems: vec![format!("Could not read the config: {error}")],
-            };
-        }
-    };
-    parse(&text)
+        read => read,
+    }
+}
+
+/// Scripts' `PATH` before the `.env` file's: Tinycast's own, which an app
+/// opened from the Finder gets short, after the folders where commands
+/// installed by hand go. Absolute: `exec` does not expand `~`.
+fn script_path() -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let inherited = std::env::var("PATH").unwrap_or_default();
+    format!("/usr/local/bin:{home}/.local/bin:{inherited}")
 }
 
 fn parse(text: &str) -> Loaded {
@@ -110,8 +159,8 @@ fn parse(text: &str) -> Loaded {
         Err(error) => {
             let message = error.message().to_owned();
             return Loaded {
-                config: Config::default(),
                 problems: vec![format!("The config is not valid TOML: {message}")],
+                ..Loaded::default()
             };
         }
     };
@@ -146,20 +195,21 @@ fn parse(text: &str) -> Loaded {
         }
         false
     });
-    Loaded { config, problems }
+    Loaded { config, env: Vec::new(), problems }
 }
 
-/// Reloads `loaded` whenever the file is saved, while the calling owner
-/// lives.
+/// Reloads `loaded` whenever the config or the `.env` file is saved, while
+/// the calling owner lives.
 pub fn watch(loaded: Signal<Loaded>) {
-    let modified = || std::fs::metadata(path()).and_then(|m| m.modified()).ok();
-    let seen = std::cell::Cell::new(modified());
+    let modified = |path: PathBuf| std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    let both = move || -> [Option<SystemTime>; 2] { [modified(path()), modified(env_path())] };
+    let seen = std::cell::Cell::new(both());
     set_interval(Duration::from_secs(1), move || {
-        let now: Option<SystemTime> = modified();
+        let now = both();
         if now != seen.get() {
             seen.set(now);
             let reloaded = load();
-            log::info!("reloaded {}", path().display());
+            log::info!("reloaded {} and .env", path().display());
             loaded.set(reloaded);
         }
     });

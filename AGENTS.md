@@ -2,7 +2,7 @@
 
 This file provides guidance to coding agents working with code in this repository.
 
-Tinycast is a Raycast-style app launcher and clipboard history for macOS only, written in Rust on
+Tinycast is a Raycast-style app launcher, clipboard history and script runner for macOS only, written in Rust on
 [Native Shell (nsh)](https://nsh.dev) 0.6. It lives in the menu bar; global shortcuts open a popup with the
 launcher (⌥Space by default) or the clipboard history (⌥⇧V).
 
@@ -57,10 +57,20 @@ scripts/build.sh              # the same, re-signed with a Keychain certificate 
   display's size for about 60 ms, so `place` keeps setting the frame until it takes. When checking display areas from
   a script, note that `NSScreen.visibleFrame` in a process with no GUI connection (plain `osascript`) leaves out the
   menu bars of displays other than the main one; call `NSApplication.sharedApplication` first.
+- **Script commands** (`src/scripts.rs`): the executable files of `~/.config/tinycast/scripts/` (made with a README
+  on first launch) are launcher rows (`script:<file name>`), named by `# @name` / `@icon` / `@mode` comments at their
+  top. The folder is listed again each time the popup opens. `scripts::start` runs one in its own process group,
+  stdout and stderr on one pipe, read with `poll` so a background `foo &` holding the pipe cannot hang it; dropping
+  the `Run` kills the group. `silent` scripts run under the root's owner (`Launcher::owner`) and end in the HUD
+  (`src/hud.rs`, a non-focusable `Popup` window reused while shown: `open_window` with the id of an open window only
+  focuses it); `output` scripts show in `src/script_view.rs` (`Mode::Output`), which stops them when it goes.
+  `WindowKind::Overlay` would suit the HUD better, but it needs `capabilities` in `nsh.json`, and declaring any
+  revokes every capability not listed.
 - **Settings** (`src/config.rs`): `~/.config/tinycast/config.toml` (written with defaults on first launch), polled
-  for changes every second. Shortcuts are registered in an `effect` whose `cleanup` releases the previous ones on
-  reload. Problems (bad TOML, bad keystroke, held shortcut) become disabled "⚠︎" items in the tray menu, and the
-  setting keeps its default.
+  for changes every second, with `~/.config/tinycast/.env` (`src/dotenv.rs`): the variables scripts run with, over a
+  `PATH` of `/usr/local/bin:$HOME/.local/bin:` and Tinycast's own. Shortcuts are registered in an `effect` whose
+  `cleanup` releases the previous ones on reload. Problems (bad TOML, bad keystroke, held shortcut, bad `.env` line)
+  become disabled "⚠︎" items in the tray menu, and the setting keeps its default.
 
 Icons: `assets/icon/` (see its README). The tray icon is `tray-icon.svg`, embedded by `src/icons.rs` as a template;
 the app icon is `app-icon.png`, named by `nsh.json`'s `icon`. `assets/icon/generate.mjs` regenerates the SVGs.
