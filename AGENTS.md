@@ -21,6 +21,10 @@ scripts/build.sh              # the same, re-signed with a Keychain certificate 
 
 - Use `nsh run`, not `cargo run`: only `nsh` applies `nsh.json` (main window hidden, `activationPolicy: accessory`
   so no Dock icon). `src/main.rs` is the template's `cargo run` entry and ignores it.
+- `nsh run` and `nsh package` build the app with the CLI's own nsh crates: they compile a copy of `Cargo.toml`
+  (`.nsh/rust/app-crates/`) whose nsh dependencies are pinned to the CLI's version (`=0.6.0` under CLI 0.6.0),
+  whatever `Cargo.toml` asks. Keep the CLI (`nsh update`) at the version `Cargo.toml` names, or `cargo` and the
+  running app use different nsh.
 - `rust-toolchain.toml` pins Rust 1.100.0: the nsh 0.6 crates need rustc ≥ 1.97.
 - `nsh package` signs macOS apps ad hoc only (`--sign` is iOS-only), and an ad-hoc signature loses the
   Accessibility permission pasting needs at every rebuild. `scripts/build.sh` re-signs with a Developer ID
