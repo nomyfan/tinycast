@@ -93,14 +93,14 @@ Data: `~/Library/Application Support/Tinycast/` (`history.json`, `images/`), ico
 - `register_global_shortcut` panics on an invalid keystroke: validate with `nsh_core::desktop::Shortcut::parse`.
   With Spotlight's ⌘Space setting on, Spotlight gets the key whatever is registered, so
   `mac::spotlight_takes_cmd_space` checks that separately. `register_global_shortcut` always asks for an exclusive
-  Carbon hot key, which any other registration of the keystroke makes answer `false`; macOS 27's Spotlight (the Siri
-  AI app, relaunched at once when killed) registers ⌘Space even with that setting off. Tinycast then registers it
-  shared, as Raycast does (`mac::shared_hotkey`, Carbon on the main thread, presses sent back to the engine thread).
+  Carbon hot key, which another app's exclusive registration of the keystroke makes answer `false`; macOS 27's
+  Spotlight (the Siri AI app, relaunched at once when killed) registers ⌘Space even with that setting off. Tinycast
+  then registers it shared, as Raycast does (`mac::shared_hotkey`, Carbon on the main thread, presses sent back to
+  the engine thread).
 - Conditional key bindings: call `on_key_with` inside a `when(..)` branch; the binding goes when the branch does
   (Backspace-in-empty-field goes back). Rust's `when` takes a `bool` condition.
 - `Command` always puts its search bar first; the actions panel flips it with `flex-col-reverse` and renders its
   heading outside the `Command`.
-- Tailwind `flex-1` in `app_class` does not size a `text`: use the typed `.flex_1()`.
 - The popup is frosted glass (`macos_backdrop` with `BehindWindow`, state `Active` since the app is never active,
   over `bg-popover/55`). Opaque theme colors (`accent`, `muted`, `border`) look like white slabs in light mode on
   it: use translucent foreground shades (`bg-foreground/10`, `border-foreground/10`).
@@ -108,6 +108,6 @@ Data: `~/Library/Application Support/Tinycast/` (`history.json`, `images/`), ico
 ## References
 
 - nsh docs: <https://nsh.dev/llms.txt> (every page is also served as Markdown at its URL plus `.md`).
-- The nsh crates' source in `~/.cargo/registry/src/*/nsh-{core,base,platform-macos}-0.6.0` is the most precise
+- The nsh crates' source in `~/.cargo/registry/src/*/nsh-{core,base,platform-macos}-0.6.1` is the most precise
   reference for the Rust API and macOS behavior.
 - Project skills (`.agents/skills.toml`, linked from `.claude/skills`): `nsh` and `nsh-design-guides`.

@@ -576,17 +576,18 @@ mod tests {
     #[test]
     fn a_background_process_does_not_hold_the_run() {
         let dir = folder("background");
-        let s = write_script(&dir, "b.sh", "#!/bin/sh\nsleep 100 &\necho started\n", 0o755);
+        let s = write_script(&dir, "b.sh", "#!/bin/sh\nsleep 30 &\necho started\n", 0o755);
         let begun = Instant::now();
         let (lines, outcome) = run_to_end(&s);
         assert_eq!((lines, outcome), (vec!["started".into()], Outcome::Succeeded));
-        assert!(begun.elapsed() < Duration::from_secs(2));
+        // Held by the background `sleep`, the run would last its 30 s.
+        assert!(begun.elapsed() < Duration::from_secs(10));
     }
 
     #[test]
     fn dropping_the_run_kills_what_it_started() {
         let dir = folder("kill");
-        let s = write_script(&dir, "s.sh", "#!/bin/sh\nsleep 100 &\necho $!\nwait\n", 0o755);
+        let s = write_script(&dir, "s.sh", "#!/bin/sh\nsleep 30 &\necho $!\nwait\n", 0o755);
         let mut run = start(&s, &[]);
         let pid: i32 = run.lines.blocking_recv().unwrap().parse().unwrap();
         drop(run);

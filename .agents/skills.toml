@@ -1,12 +1,12 @@
 [skills.nsh]
-source_url = "https://github.com/longbridge/nsh/tree/v0.6.0/skills/nsh"
+source_url = "https://github.com/longbridge/nsh/tree/v0.6.1/skills/nsh"
 slug = "longbridge/nsh"
 path = "skills/nsh"
-sha = "84de1436f56c3961e4a11aed3d03b0c457b354cf"
-checksum = "sha256:b7c483647f14537734f1cc1894eea1c571857cc34877599594ffac96ae7e1530"
+sha = "2f51d8611677c8a6bbad937b39756e8d0cc45350"
+checksum = "sha256:1ca70a1ddf64b40769e834b0b3ce220b495ce5d1c0509ab488edddcdf69fad4f"
 
 [skills.nsh-design-guides]
-source_url = "https://github.com/longbridge/nsh/tree/v0.6.0/skills/nsh-design-guides"
+source_url = "https://github.com/longbridge/nsh/tree/v0.6.1/skills/nsh-design-guides"
 slug = "longbridge/nsh"
 path = "skills/nsh-design-guides"
 sha = "141785122b4f8de8565108e3efd18cab9318df9c"
