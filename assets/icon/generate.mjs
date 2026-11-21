@@ -30,7 +30,7 @@ const TRAY = { r: 6.6, stroke: 1.5, tilt: 15 };         // 18 pt template
 // Ripples spreading from the bobber, lit from the top left, over a fine grain. Both are drawn here into
 // PNGs embedded in the SVG (no <filter>, so every renderer draws them alike). Strengths are the most
 // a pixel is lightened or darkened (0–1).
-const RIPPLE = { strength: 0.07, wavelength: 46, fade: 260 };  // wavelength grows outward; fade: px to 1/e
+const RIPPLE = { strength: 0.07, wavelength: 78, fade: 300 };  // wavelength grows outward; fade: px to 1/e
 const GRAIN = { strength: 0.10, size: 1.6, mottle: 0.05 };     // size: px (1 px fades out when shown smaller); mottle: ~90 px blotches
 
 // ── Helpers ────────────────────────────────────────────────────────────────
