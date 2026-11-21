@@ -31,7 +31,10 @@ pub fn scan() -> Vec<AppEntry> {
         collect(Path::new(root), 2, &mut apps);
     }
     // Finder is not in any of them.
-    collect_app(Path::new("/System/Library/CoreServices/Finder.app"), &mut apps);
+    collect_app(
+        Path::new("/System/Library/CoreServices/Finder.app"),
+        &mut apps,
+    );
     apps.sort_by_key(|a| a.name.to_lowercase());
     apps.dedup_by(|a, b| a.path == b.path);
     apps

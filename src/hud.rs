@@ -39,7 +39,12 @@ pub(crate) struct Hud {
 
 impl Hud {
     pub(crate) fn new() -> Self {
-        Hud { owner: Owner::current(), message: signal(Message::default()), window: stored(None), timer: stored(None) }
+        Hud {
+            owner: Owner::current(),
+            message: signal(Message::default()),
+            window: stored(None),
+            timer: stored(None),
+        }
     }
 
     /// Shows `text` (one line, cut short when too long) for two seconds,
@@ -47,13 +52,20 @@ impl Hud {
     /// display the pointer is on now.
     pub(crate) fn show(self, text: &str, failed: bool) {
         self.owner.run(|| {
-            self.message.set(Message { text: text.to_owned(), failed });
+            self.message.set(Message {
+                text: text.to_owned(),
+                failed,
+            });
             let at = crate::mouse_display().map(|display| top_left(&display));
             match self.window.get() {
                 // `open_window` with the id of an open window only focuses it.
                 Some(open) => {
                     if let Some(at) = at {
-                        open.set_bounds(WindowFrame { x: Some(at.x), y: Some(at.y), ..WindowFrame::default() });
+                        open.set_bounds(WindowFrame {
+                            x: Some(at.x),
+                            y: Some(at.y),
+                            ..WindowFrame::default()
+                        });
                     }
                 }
                 None => self.open(at),

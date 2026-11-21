@@ -97,7 +97,8 @@ impl View {
     fn delete(self) {
         if let Some(id) = self.highlighted.get_untracked() {
             let next = self.launcher.history.with_untracked(|entries| {
-                self.query.with_untracked(|q| next_after_delete(entries, q, id))
+                self.query
+                    .with_untracked(|q| next_after_delete(entries, q, id))
             });
             clipboard::remove(self.launcher.history, |e| e.id == id);
             if let (Some(next), Some(api)) = (next, self.launcher.search.api::<CommandApi>()) {
@@ -128,7 +129,10 @@ struct Target {
 
 fn target() -> Target {
     let app = mac::frontmost_app();
-    let name = app.as_ref().and_then(|a| a.name.clone()).unwrap_or_else(|| "Active App".into());
+    let name = app
+        .as_ref()
+        .and_then(|a| a.name.clone())
+        .unwrap_or_else(|| "Active App".into());
     let icon = app.and_then(|a| a.path).and_then(|path| {
         let icon = icons::cached_path(&path);
         icon.exists().then(|| icon.to_string_lossy().into_owned())
@@ -147,7 +151,10 @@ pub fn clipboard_view(launcher: Launcher) -> impl IntoElement {
     let v = view_state;
     let target_name = target().name;
 
-    let always = KeyOptions { when: When::Always, ..KeyOptions::default() };
+    let always = KeyOptions {
+        when: When::Always,
+        ..KeyOptions::default()
+    };
     on_key_with("mod+k", always, move |_| match v.actions.get_untracked() {
         Some(_) => v.close_actions(),
         None => v.open_actions(Page::Main),
@@ -155,8 +162,12 @@ pub fn clipboard_view(launcher: Launcher) -> impl IntoElement {
     on_key_with("mod+enter", always, move |_| v.copy());
     on_key_with("mod+shift+p", always, move |_| v.toggle_pin());
     on_key_with("ctrl+x", always, move |_| v.delete());
-    on_key_with("mod+shift+x", always, move |_| v.open_actions(Page::DeleteRange));
-    on_key_with("ctrl+shift+x", always, move |_| v.open_actions(Page::ConfirmDeleteAll));
+    on_key_with("mod+shift+x", always, move |_| {
+        v.open_actions(Page::DeleteRange)
+    });
+    on_key_with("ctrl+shift+x", always, move |_| {
+        v.open_actions(Page::ConfirmDeleteAll)
+    });
 
     view()
         .flex_1()
@@ -180,7 +191,13 @@ pub fn clipboard_view(launcher: Launcher) -> impl IntoElement {
                 view()
             },
         ))
-        .child(view().flex_1().flex_row().child(entries(v)).child(preview(v)))
+        .child(
+            view()
+                .flex_1()
+                .flex_row()
+                .child(entries(v))
+                .child(preview(v)),
+        )
         .child(footer(v, target_name))
         // While the actions panel is open, a clear cover over the rest takes
         // the pointer: a row it passes over would take the highlight, and the
@@ -188,9 +205,16 @@ pub fn clipboard_view(launcher: Launcher) -> impl IntoElement {
         // for. A click on it closes the panel, as in Raycast.
         .child(when(
             move || v.actions.get().is_some(),
-            move || view().app_class("absolute inset-0").on_press(move || v.close_actions()),
+            move || {
+                view()
+                    .app_class("absolute inset-0")
+                    .on_press(move || v.close_actions())
+            },
         ))
-        .child(when(move || v.actions.get().is_some(), move || actions_panel(v)))
+        .child(when(
+            move || v.actions.get().is_some(),
+            move || actions_panel(v),
+        ))
 }
 
 /// The entry id of a row's id (`clip:<id>`).
@@ -238,7 +262,10 @@ fn next_after_delete(entries: &[ClipEntry], query: &str, id: u64) -> Option<u64>
         .filter_map(|row| parse_id(&row.id))
         .collect();
     let at = shown.iter().position(|&e| e == id)?;
-    shown.get(at + 1).or(at.checked_sub(1).and_then(|i| shown.get(i))).copied()
+    shown
+        .get(at + 1)
+        .or(at.checked_sub(1).and_then(|i| shown.get(i)))
+        .copied()
 }
 
 fn entries(v: View) -> impl IntoElement {
@@ -283,9 +310,16 @@ fn entries(v: View) -> impl IntoElement {
                 .gap_2p5()
                 .on_context_menu(move |_: &ContextMenuEvent| v.open_actions_for(&row_id))
                 .child(row_icon(src))
-                .child(text(entry.label.clone()).flex_1().app_class("text-sm").number_of_lines(1))
+                .child(
+                    text(entry.label.clone())
+                        .flex_1()
+                        .app_class("text-sm")
+                        .number_of_lines(1),
+                )
         })
-        .empty(text("Nothing copied yet").app_class("py-6 text-center text-sm text-muted-foreground"))
+        .empty(
+            text("Nothing copied yet").app_class("py-6 text-center text-sm text-muted-foreground"),
+        )
         .w(px(320.0))
         .app_class("border-r border-foreground/10")
 }
@@ -328,11 +362,25 @@ fn footer(v: View, target_name: String) -> impl IntoElement {
         .gap_2()
         .px_3()
         .app_class("border-t border-foreground/10 bg-foreground/[0.03]")
-        .child(image(icons::svg_uri(icons::CLIPBOARD_SVG)).w(px(18.0)).h(px(18.0)))
-        .child(text("Clipboard History").flex_1().app_class("text-sm text-muted-foreground"))
+        .child(
+            image(icons::svg_uri(icons::CLIPBOARD_SVG))
+                .w(px(18.0))
+                .h(px(18.0)),
+        )
+        .child(
+            text("Clipboard History")
+                .flex_1()
+                .app_class("text-sm text-muted-foreground"),
+        )
         .child(text(format!("Paste to {target_name}")).app_class("text-sm"))
         .child(keycaps("↩"))
-        .child(view().w(px(1.0)).h(px(16.0)).mx_1().app_class("bg-foreground/10"))
+        .child(
+            view()
+                .w(px(1.0))
+                .h(px(16.0))
+                .mx_1()
+                .app_class("bg-foreground/10"),
+        )
         .child(
             nsh_base::button()
                 .flex_row()
@@ -400,9 +448,15 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
                 CommandItem::new("paste", format!("Paste to {}", target.name))
                     .group("Use")
                     .shortcut("enter"),
-                CommandItem::new("copy", "Copy to Clipboard").group("Use").shortcut("mod+enter"),
-                CommandItem::new("pin", pin_label).group("Organize").shortcut("mod+shift+p"),
-                CommandItem::new("delete", "Delete Entry").group("Delete").shortcut("ctrl+x"),
+                CommandItem::new("copy", "Copy to Clipboard")
+                    .group("Use")
+                    .shortcut("mod+enter"),
+                CommandItem::new("pin", pin_label)
+                    .group("Organize")
+                    .shortcut("mod+shift+p"),
+                CommandItem::new("delete", "Delete Entry")
+                    .group("Delete")
+                    .shortcut("ctrl+x"),
                 CommandItem::new("delete-range", "Delete Entries…")
                     .group("Delete")
                     .shortcut("mod+shift+x"),
@@ -471,16 +525,16 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
             let destructive = entry.id.starts_with("delete") || entry.id == "confirm-delete-all";
             let icon = match entry.id.as_ref() {
                 "paste" => Some(image(
-                    paste_icon.clone().unwrap_or_else(|| icons::svg_uri(icons::CLIPBOARD_SVG)),
+                    paste_icon
+                        .clone()
+                        .unwrap_or_else(|| icons::svg_uri(icons::CLIPBOARD_SVG)),
                 )),
                 "copy" | "pin" => Some(
                     image(icons::svg_uri(match entry.id.as_ref() {
                         "copy" => icons::COPY_SVG,
                         _ => icons::PIN_SVG,
                     }))
-                    .tint_color(move || nsh_core::element::AdaptiveColor::from(
-                        nsh_base::theme().foreground,
-                    )),
+                    .tint_color(move || nsh_base::theme().foreground),
                 ),
                 id if id.starts_with("delete") => Some(image(icons::svg_uri(icons::TRASH_SVG))),
                 _ => None,
@@ -494,7 +548,11 @@ fn actions_page(v: View, page: Page) -> impl IntoElement {
                 .child(
                     text(entry.label.clone())
                         .flex_1()
-                        .app_class(if destructive { "text-sm text-destructive" } else { "text-sm" }),
+                        .app_class(if destructive {
+                            "text-sm text-destructive"
+                        } else {
+                            "text-sm"
+                        }),
                 )
                 .child(keycaps(entry.shortcut_label.as_deref().unwrap_or_default()))
         });
@@ -530,7 +588,11 @@ fn details(entry: &ClipEntry) -> String {
         3600..86400 => format!("{} h ago", ago / 3600),
         _ => format!("{} d ago", ago / 86400),
     };
-    let source = entry.source.as_deref().map(|s| format!(" · from {s}")).unwrap_or_default();
+    let source = entry
+        .source
+        .as_deref()
+        .map(|s| format!(" · from {s}"))
+        .unwrap_or_default();
     format!("{what} · {ago}{source}")
 }
 

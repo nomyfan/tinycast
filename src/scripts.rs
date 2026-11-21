@@ -139,12 +139,24 @@ fn scan_in(dir: &Path) -> Vec<Script> {
             let path = entry.ok()?.path();
             let file_name = path.file_name()?.to_str()?.to_owned();
             let metadata = std::fs::metadata(&path).ok()?;
-            if file_name.starts_with('.') || !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+            if file_name.starts_with('.')
+                || !metadata.is_file()
+                || metadata.permissions().mode() & 0o111 == 0
+            {
                 return None;
             }
             let mut head = Vec::new();
-            std::fs::File::open(&path).ok()?.take(HEADER_BYTES).read_to_end(&mut head).ok()?;
-            Some(script(dir, path, &file_name, &String::from_utf8_lossy(&head)))
+            std::fs::File::open(&path)
+                .ok()?
+                .take(HEADER_BYTES)
+                .read_to_end(&mut head)
+                .ok()?;
+            Some(script(
+                dir,
+                path,
+                &file_name,
+                &String::from_utf8_lossy(&head),
+            ))
         })
         .collect();
     scripts.sort_by_key(|s| s.name.to_lowercase());
@@ -168,7 +180,10 @@ fn script(dir: &Path, path: PathBuf, file_name: &str, head: &str) -> Script {
             _ => {}
         }
     }
-    let stem = Path::new(file_name).file_stem().and_then(|s| s.to_str()).unwrap_or(file_name);
+    let stem = Path::new(file_name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(file_name);
     Script {
         id: format!("script:{file_name}"),
         name: name.unwrap_or_else(|| stem.to_owned()),
@@ -189,11 +204,16 @@ fn header(text: &str) -> Vec<(&str, &str)> {
         if line.is_empty() {
             continue;
         }
-        let Some(comment) = ["#", "//", "--"].iter().find_map(|marker| line.strip_prefix(marker)) else {
+        let Some(comment) = ["#", "//", "--"]
+            .iter()
+            .find_map(|marker| line.strip_prefix(marker))
+        else {
             break;
         };
         if let Some(declaration) = comment.trim_start().strip_prefix('@') {
-            let (key, value) = declaration.split_once(char::is_whitespace).unwrap_or((declaration, ""));
+            let (key, value) = declaration
+                .split_once(char::is_whitespace)
+                .unwrap_or((declaration, ""));
             found.push((key, value.trim()));
         }
     }
@@ -206,7 +226,9 @@ fn header(text: &str) -> Vec<(&str, &str)> {
 /// default icon. Blocks: may make the Finder icon.
 fn icon_of(dir: &Path, value: &str) -> ScriptIcon {
     let lower = value.to_lowercase();
-    let is_image = [".png", ".svg", ".jpg", ".jpeg"].iter().any(|ext| lower.ends_with(ext));
+    let is_image = [".png", ".svg", ".jpg", ".jpeg"]
+        .iter()
+        .any(|ext| lower.ends_with(ext));
     if !is_image && !value.contains('/') {
         return ScriptIcon::Emoji(value.to_owned());
     }
@@ -216,7 +238,10 @@ fn icon_of(dir: &Path, value: &str) -> ScriptIcon {
     };
     if !is_image {
         // A missing path would get the generic document icon.
-        let finder_icon = path.exists().then(|| icons::ensure(&path.to_string_lossy())).flatten();
+        let finder_icon = path
+            .exists()
+            .then(|| icons::ensure(&path.to_string_lossy()))
+            .flatten();
         return finder_icon.map_or(ScriptIcon::Default, ScriptIcon::Image);
     }
     if lower.ends_with(".svg") {
@@ -261,7 +286,9 @@ impl Run {
     /// background is killed.
     pub(crate) async fn outcome(self) -> Outcome {
         // The rest of `self`, the group's killer, goes when this returns.
-        self.done.await.unwrap_or_else(|_| Outcome::Failed("Stopped".into()))
+        self.done
+            .await
+            .unwrap_or_else(|_| Outcome::Failed("Stopped".into()))
     }
 }
 
@@ -308,7 +335,11 @@ pub(crate) fn start(script: &Script, env: &[(String, String)]) -> Run {
             Some(pgid)
         }
         Err(error) => {
-            let file_name = script.path.file_name().unwrap_or_default().to_string_lossy();
+            let file_name = script
+                .path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
             let why = match error.raw_os_error() {
                 Some(libc::EACCES) => format!("Not executable: chmod +x {file_name}"),
                 _ => error.to_string(),
@@ -317,12 +348,19 @@ pub(crate) fn start(script: &Script, env: &[(String, String)]) -> Run {
             None
         }
     };
-    Run { lines, done, _group: Group { pgid, dropped } }
+    Run {
+        lines,
+        done,
+        _group: Group { pgid, dropped },
+    }
 }
 
 /// The script running in a process group of its own, its stdout and stderr
 /// on one pipe so their lines keep their order.
-fn spawn(script: &Script, env: &[(String, String)]) -> std::io::Result<(Child, std::io::PipeReader)> {
+fn spawn(
+    script: &Script,
+    env: &[(String, String)],
+) -> std::io::Result<(Child, std::io::PipeReader)> {
     let (output, writer) = std::io::pipe()?;
     let child = std::process::Command::new(&script.path)
         .current_dir(script.path.parent().unwrap_or(Path::new("/")))
@@ -339,7 +377,12 @@ fn spawn(script: &Script, env: &[(String, String)]) -> std::io::Result<(Child, s
 
 /// Sends the script's lines until the pipe ends, its `Run` is dropped, or
 /// a little after the script has exited; then its outcome.
-fn pump(mut child: Child, mut output: std::io::PipeReader, lines: &mpsc::UnboundedSender<String>, dropped: &AtomicBool) -> Outcome {
+fn pump(
+    mut child: Child,
+    mut output: std::io::PipeReader,
+    lines: &mpsc::UnboundedSender<String>,
+    dropped: &AtomicBool,
+) -> Outcome {
     let mut splitter = Lines::default();
     let mut buffer = [0u8; 8192];
     let mut exited_at: Option<Instant> = None;
@@ -347,7 +390,11 @@ fn pump(mut child: Child, mut output: std::io::PipeReader, lines: &mpsc::Unbound
         if dropped.load(Ordering::Relaxed) || exited_at.is_some_and(|at| at.elapsed() > DRAIN) {
             break;
         }
-        let mut fd = libc::pollfd { fd: output.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+        let mut fd = libc::pollfd {
+            fd: output.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
         // SAFETY: one valid pollfd for the pipe, which outlives the call.
         let ready = unsafe { libc::poll(&mut fd, 1, POLL_MS) };
         if ready > 0 {
@@ -357,7 +404,9 @@ fn pump(mut child: Child, mut output: std::io::PipeReader, lines: &mpsc::Unbound
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(_) => break,
             }
-        } else if ready < 0 && std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+        } else if ready < 0
+            && std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted
+        {
             break;
         }
         if exited_at.is_none() && matches!(child.try_wait(), Ok(Some(_))) {
@@ -414,9 +463,7 @@ fn clean(bytes: &[u8]) -> String {
         match c {
             '\x1b' => match chars.next() {
                 // CSI: parameters, then a final byte from @ to ~.
-                Some('[') => {
-                    while chars.next().is_some_and(|c| !('@'..='~').contains(&c)) {}
-                }
+                Some('[') => while chars.next().is_some_and(|c| !('@'..='~').contains(&c)) {},
                 // OSC: to BEL or ESC \.
                 Some(']') => {
                     while let Some(c) = chars.next() {
@@ -472,7 +519,12 @@ mod tests {
     #[test]
     fn the_header_names_the_script() {
         let dir = Path::new("/scripts");
-        let s = script(dir, dir.join("dark.sh"), "dark.sh", "#!/bin/bash\n\n# @name Toggle Dark Mode\n#   @icon 🌙\n\n# @mode output\necho\n");
+        let s = script(
+            dir,
+            dir.join("dark.sh"),
+            "dark.sh",
+            "#!/bin/bash\n\n# @name Toggle Dark Mode\n#   @icon 🌙\n\n# @mode output\necho\n",
+        );
         assert_eq!(s.id, "script:dark.sh");
         assert_eq!(s.name, "Toggle Dark Mode");
         assert_eq!(s.icon, ScriptIcon::Emoji("🌙".into()));
@@ -482,7 +534,12 @@ mod tests {
     #[test]
     fn defaults_without_a_header() {
         let dir = Path::new("/scripts");
-        let s = script(dir, dir.join("list-ports.sh"), "list-ports.sh", "#!/bin/sh\nlsof -i\n");
+        let s = script(
+            dir,
+            dir.join("list-ports.sh"),
+            "list-ports.sh",
+            "#!/bin/sh\nlsof -i\n",
+        );
         assert_eq!(s.name, "list-ports");
         assert_eq!(s.icon, ScriptIcon::Default);
         assert_eq!(s.mode, OutputMode::Silent);
@@ -490,18 +547,27 @@ mod tests {
 
     #[test]
     fn other_comment_styles() {
-        assert_eq!(header("#!/usr/bin/swift\n// @name Swift\n-- @mode output\n"), [("name", "Swift"), ("mode", "output")]);
+        assert_eq!(
+            header("#!/usr/bin/swift\n// @name Swift\n-- @mode output\n"),
+            [("name", "Swift"), ("mode", "output")]
+        );
     }
 
     #[test]
     fn code_ends_the_header() {
-        assert_eq!(header("#!/bin/sh\n# @name Kept\necho hi\n# @name Ignored\n"), [("name", "Kept")]);
+        assert_eq!(
+            header("#!/bin/sh\n# @name Kept\necho hi\n# @name Ignored\n"),
+            [("name", "Kept")]
+        );
     }
 
     #[test]
     fn an_unknown_mode_is_silent() {
         let dir = Path::new("/scripts");
-        assert_eq!(script(dir, dir.join("a"), "a", "# @mode ouput\n").mode, OutputMode::Silent);
+        assert_eq!(
+            script(dir, dir.join("a"), "a", "# @mode ouput\n").mode,
+            OutputMode::Silent
+        );
     }
 
     #[test]
@@ -509,15 +575,24 @@ mod tests {
         let dir = folder("icons");
         std::fs::write(dir.join("logo.png"), b"png").unwrap();
         std::fs::write(dir.join("logo.svg"), "<svg/>").unwrap();
-        assert_eq!(icon_of(&dir, "logo.png"), ScriptIcon::Image(dir.join("logo.png").to_string_lossy().into()));
-        assert_eq!(icon_of(&dir, "logo.svg"), ScriptIcon::Image(icons::svg_uri("<svg/>")));
+        assert_eq!(
+            icon_of(&dir, "logo.png"),
+            ScriptIcon::Image(dir.join("logo.png").to_string_lossy().into())
+        );
+        assert_eq!(
+            icon_of(&dir, "logo.svg"),
+            ScriptIcon::Image(icons::svg_uri("<svg/>"))
+        );
         assert_eq!(icon_of(&dir, "missing.PNG"), ScriptIcon::Default);
     }
 
     #[test]
     fn other_paths_show_their_finder_icon() {
         let dir = folder("finder-icons");
-        let ScriptIcon::Image(png) = icon_of(&dir, "/System/Library/ExtensionKit/Extensions/DisplaysExt.appex") else {
+        let ScriptIcon::Image(png) = icon_of(
+            &dir,
+            "/System/Library/ExtensionKit/Extensions/DisplaysExt.appex",
+        ) else {
             panic!("no icon for the Displays pane");
         };
         assert!(png.ends_with(".png") && Path::new(&png).is_file(), "{png}");
@@ -533,7 +608,12 @@ mod tests {
         write_script(&dir, ".hidden.sh", "#!/bin/sh\n", 0o755);
         std::fs::create_dir(dir.join("sub")).unwrap();
         let elsewhere = folder("scan-elsewhere");
-        write_script(&elsewhere, "linked.sh", "#!/bin/sh\n# @name Linked\n", 0o755);
+        write_script(
+            &elsewhere,
+            "linked.sh",
+            "#!/bin/sh\n# @name Linked\n",
+            0o755,
+        );
         std::os::unix::fs::symlink(elsewhere.join("linked.sh"), dir.join("linked.sh")).unwrap();
 
         let names: Vec<String> = scan_in(&dir).into_iter().map(|s| s.name).collect();
@@ -543,7 +623,12 @@ mod tests {
     #[test]
     fn output_keeps_its_order_across_stdout_and_stderr() {
         let dir = folder("order");
-        let s = write_script(&dir, "o.sh", "#!/bin/sh\necho one\necho two >&2\nprintf 'three\\tcol'\n", 0o755);
+        let s = write_script(
+            &dir,
+            "o.sh",
+            "#!/bin/sh\necho one\necho two >&2\nprintf 'three\\tcol'\n",
+            0o755,
+        );
         let (lines, outcome) = run_to_end(&s);
         assert_eq!(lines, ["one", "two", "three\tcol"]);
         assert_eq!(outcome, Outcome::Succeeded);
@@ -552,7 +637,12 @@ mod tests {
     #[test]
     fn runs_in_its_folder_with_the_env() {
         let dir = folder("env");
-        let s = write_script(&dir, "e.sh", "#!/bin/sh\npwd -P\necho \"$GREETING\"\n", 0o755);
+        let s = write_script(
+            &dir,
+            "e.sh",
+            "#!/bin/sh\npwd -P\necho \"$GREETING\"\n",
+            0o755,
+        );
         let mut run = start(&s, &[("GREETING".into(), "你好 🌙".into())]);
         let first = run.lines.blocking_recv().unwrap();
         assert_eq!(PathBuf::from(first), dir.canonicalize().unwrap());
@@ -563,14 +653,26 @@ mod tests {
     fn failures_say_why() {
         let dir = folder("fail");
         let exit = write_script(&dir, "x.sh", "#!/bin/sh\necho oops\nexit 3\n", 0o755);
-        assert_eq!(run_to_end(&exit), (vec!["oops".into()], Outcome::Failed("Exit code 3".into())));
+        assert_eq!(
+            run_to_end(&exit),
+            (vec!["oops".into()], Outcome::Failed("Exit code 3".into()))
+        );
         let killed = write_script(&dir, "k.sh", "#!/bin/sh\nkill -9 $$\n", 0o755);
-        assert_eq!(run_to_end(&killed).1, Outcome::Failed("Killed by signal 9".into()));
+        assert_eq!(
+            run_to_end(&killed).1,
+            Outcome::Failed("Killed by signal 9".into())
+        );
         // As from a terminal, a script without `#!` runs with /bin/sh.
         let no_shebang = write_script(&dir, "n.sh", "echo hi\n", 0o755);
-        assert_eq!(run_to_end(&no_shebang), (vec!["hi".into()], Outcome::Succeeded));
+        assert_eq!(
+            run_to_end(&no_shebang),
+            (vec!["hi".into()], Outcome::Succeeded)
+        );
         let plain = write_script(&dir, "p.sh", "#!/bin/sh\n", 0o644);
-        assert_eq!(run_to_end(&plain).1, Outcome::Failed("Not executable: chmod +x p.sh".into()));
+        assert_eq!(
+            run_to_end(&plain).1,
+            Outcome::Failed("Not executable: chmod +x p.sh".into())
+        );
     }
 
     #[test]
@@ -579,7 +681,10 @@ mod tests {
         let s = write_script(&dir, "b.sh", "#!/bin/sh\nsleep 30 &\necho started\n", 0o755);
         let begun = Instant::now();
         let (lines, outcome) = run_to_end(&s);
-        assert_eq!((lines, outcome), (vec!["started".into()], Outcome::Succeeded));
+        assert_eq!(
+            (lines, outcome),
+            (vec!["started".into()], Outcome::Succeeded)
+        );
         // Held by the background `sleep`, the run would last its 30 s.
         assert!(begun.elapsed() < Duration::from_secs(10));
     }
@@ -587,7 +692,12 @@ mod tests {
     #[test]
     fn dropping_the_run_kills_what_it_started() {
         let dir = folder("kill");
-        let s = write_script(&dir, "s.sh", "#!/bin/sh\nsleep 30 &\necho $!\nwait\n", 0o755);
+        let s = write_script(
+            &dir,
+            "s.sh",
+            "#!/bin/sh\nsleep 30 &\necho $!\nwait\n",
+            0o755,
+        );
         let mut run = start(&s, &[]);
         let pid: i32 = run.lines.blocking_recv().unwrap().parse().unwrap();
         drop(run);
@@ -622,6 +732,9 @@ mod tests {
 
     #[test]
     fn escapes_and_control_characters_go() {
-        assert_eq!(clean(b"\x1b[1;31mred\x1b[0m\r \x1b]0;title\x07ok\tdone"), "red ok\tdone");
+        assert_eq!(
+            clean(b"\x1b[1;31mred\x1b[0m\r \x1b]0;title\x07ok\tdone"),
+            "red ok\tdone"
+        );
     }
 }

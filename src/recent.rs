@@ -31,7 +31,9 @@ fn recent_file() -> PathBuf {
 }
 
 pub(crate) fn now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// The choices saved last time, none when there are none.
@@ -70,7 +72,10 @@ pub(crate) fn record(recent: Signal<Recent>, id: &str) {
 /// days (up to `COUNTED`). It lifts an item over a match about as good,
 /// not over a much better one.
 pub(crate) fn bonus(times: &[u64], now: u64) -> i32 {
-    let ages = times.iter().map(|&at| now.saturating_sub(at)).filter(|&age| age < KEPT);
+    let ages = times
+        .iter()
+        .map(|&at| now.saturating_sub(at))
+        .filter(|&age| age < KEPT);
     let Some(last) = ages.clone().min() else {
         return 0;
     };
@@ -96,12 +101,19 @@ pub(crate) fn recent_first(items: Vec<CommandItem>, recent: &Recent, now: u64) -
         .map(|(i, item)| (rank(item), i))
         .filter(|((bonus, _), _)| *bonus > 0)
         .collect();
-    picked.sort_by(|a, b| b.0.cmp(&a.0));
+    picked.sort_by_key(|&(bonus, _)| std::cmp::Reverse(bonus));
     picked.truncate(SHOWN);
 
     let mut slots: Vec<Option<CommandItem>> = items.into_iter().map(Some).collect();
-    let first = picked.iter().filter_map(|&(_, i)| slots[i].take()).map(|item| item.group("Recent"));
-    first.collect::<Vec<_>>().into_iter().chain(slots.into_iter().flatten()).collect()
+    let first = picked
+        .iter()
+        .filter_map(|&(_, i)| slots[i].take())
+        .map(|item| item.group("Recent"));
+    first
+        .collect::<Vec<_>>()
+        .into_iter()
+        .chain(slots.into_iter().flatten())
+        .collect()
 }
 
 #[cfg(test)]
@@ -133,13 +145,19 @@ mod tests {
         ];
         let recent = Recent::from([
             ("c".to_owned(), vec![now - 60]),
-            ("b".to_owned(), vec![now - 3 * DAY, now - 2 * DAY, now - DAY - HOUR]),
+            (
+                "b".to_owned(),
+                vec![now - 3 * DAY, now - 2 * DAY, now - DAY - HOUR],
+            ),
             ("gone".to_owned(), vec![now]),
         ]);
         let shown = recent_first(items, &recent, now);
         let ids: Vec<_> = shown.iter().map(|i| i.id.as_ref()).collect();
         assert_eq!(ids, ["c", "b", "a"]);
         let groups: Vec<_> = shown.iter().map(|i| i.group.as_deref()).collect();
-        assert_eq!(groups, [Some("Recent"), Some("Recent"), Some("Applications")]);
+        assert_eq!(
+            groups,
+            [Some("Recent"), Some("Recent"), Some("Applications")]
+        );
     }
 }

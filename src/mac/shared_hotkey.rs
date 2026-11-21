@@ -153,7 +153,10 @@ fn register_on_main(id: u32, key_code: u16, modifiers: u32, pressed: UnboundedSe
         RegisterEventHotKey(
             u32::from(key_code),
             modifiers,
-            EventHotKeyId { signature: SIGNATURE, id },
+            EventHotKeyId {
+                signature: SIGNATURE,
+                id,
+            },
             GetApplicationEventTarget(),
             0,
             &mut hot_key,
@@ -164,7 +167,11 @@ fn register_on_main(id: u32, key_code: u16, modifiers: u32, pressed: UnboundedSe
         return false;
     }
     REGISTERED.with_borrow_mut(|registered| {
-        registered.get_or_insert_default().push(Registered { id, hot_key, pressed });
+        registered.get_or_insert_default().push(Registered {
+            id,
+            hot_key,
+            pressed,
+        });
     });
     true
 }
@@ -231,7 +238,9 @@ fn key_code(key: Key) -> Option<u16> {
     const ANSI: &str = "asdfhgzxcv\0bqweryt123465=97-80]ou[ip\0lj'k;\\,/nm.";
     match key {
         Key::Space => Some(49),
-        Key::Char(c) => ANSI.find(c.to_ascii_lowercase()).and_then(|i| u16::try_from(i).ok()),
+        Key::Char(c) => ANSI
+            .find(c.to_ascii_lowercase())
+            .and_then(|i| u16::try_from(i).ok()),
         _ => None,
     }
 }

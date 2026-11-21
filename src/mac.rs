@@ -43,9 +43,13 @@ pub fn change_count() -> isize {
 /// Whether the pasteboard's contents are marked to stay out of the
 /// history (a password).
 pub fn is_skipped() -> bool {
-    NSPasteboard::generalPasteboard().types().is_some_and(|types| {
-        types.iter().any(|t| SKIPPED_TYPES.contains(&t.to_string().as_str()))
-    })
+    NSPasteboard::generalPasteboard()
+        .types()
+        .is_some_and(|types| {
+            types
+                .iter()
+                .any(|t| SKIPPED_TYPES.contains(&t.to_string().as_str()))
+        })
 }
 
 /// The pasteboard's text, unless it has none or only whitespace.
@@ -88,7 +92,10 @@ pub fn read_image() -> Option<CopiedImage> {
     } else {
         // SAFETY: an empty dictionary of properties.
         unsafe {
-            bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new())
+            bitmap.representationUsingType_properties(
+                NSBitmapImageFileType::PNG,
+                &NSDictionary::new(),
+            )
         }?
         .to_vec()
     };
@@ -108,7 +115,9 @@ pub fn write_image(path: &str) -> bool {
     };
     let pasteboard = NSPasteboard::generalPasteboard();
     pasteboard.clearContents();
-    pasteboard.writeObjects(&NSArray::from_retained_slice(&[ProtocolObject::from_retained(image)]))
+    pasteboard.writeObjects(&NSArray::from_retained_slice(&[
+        ProtocolObject::from_retained(image),
+    ]))
 }
 
 /// The app in front, which is the one that copied right after a change.
@@ -120,14 +129,21 @@ pub struct FrontApp {
 
 /// The process of the app in front.
 pub fn frontmost_pid() -> Option<i32> {
-    Some(NSWorkspace::sharedWorkspace().frontmostApplication()?.processIdentifier())
+    Some(
+        NSWorkspace::sharedWorkspace()
+            .frontmostApplication()?
+            .processIdentifier(),
+    )
 }
 
 pub fn frontmost_app() -> Option<FrontApp> {
     let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
     Some(FrontApp {
         name: app.localizedName().map(|n| n.to_string()),
-        path: app.bundleURL().and_then(|url| url.path()).map(|p| p.to_string()),
+        path: app
+            .bundleURL()
+            .and_then(|url| url.path())
+            .map(|p| p.to_string()),
     })
 }
 
@@ -159,12 +175,14 @@ pub fn launch_app(path: &str) {
     let url = NSURL::fileURLWithPath(&NSString::from_str(path));
     let path = path.to_owned();
     // Runs on a queue of LaunchServices' once the launch is done.
-    let done = RcBlock::new(move |_app: *mut NSRunningApplication, error: *mut NSError| {
-        // SAFETY: `error` is null or a valid NSError for the block's duration.
-        if let Some(error) = unsafe { error.as_ref() } {
-            log::warn!("could not open {path}: {}", error.localizedDescription());
-        }
-    });
+    let done = RcBlock::new(
+        move |_app: *mut NSRunningApplication, error: *mut NSError| {
+            // SAFETY: `error` is null or a valid NSError for the block's duration.
+            if let Some(error) = unsafe { error.as_ref() } {
+                log::warn!("could not open {path}: {}", error.localizedDescription());
+            }
+        },
+    );
     NSWorkspace::sharedWorkspace().openApplicationAtURL_configuration_completionHandler(
         &url,
         &NSWorkspaceOpenConfiguration::configuration(),
@@ -212,8 +230,16 @@ type CFTypeRef = *const c_void;
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
     fn AXUIElementCreateApplication(pid: i32) -> CFTypeRef;
-    fn AXUIElementCopyAttributeValue(element: CFTypeRef, attribute: CFTypeRef, value: *mut CFTypeRef) -> i32;
-    fn AXUIElementSetAttributeValue(element: CFTypeRef, attribute: CFTypeRef, value: CFTypeRef) -> i32;
+    fn AXUIElementCopyAttributeValue(
+        element: CFTypeRef,
+        attribute: CFTypeRef,
+        value: *mut CFTypeRef,
+    ) -> i32;
+    fn AXUIElementSetAttributeValue(
+        element: CFTypeRef,
+        attribute: CFTypeRef,
+        value: CFTypeRef,
+    ) -> i32;
     fn AXValueCreate(kind: u32, value: *const c_void) -> CFTypeRef;
     fn AXValueGetValue(value: CFTypeRef, kind: u32, out: *mut c_void) -> bool;
 }
@@ -310,11 +336,26 @@ impl AxWindow {
         // SAFETY: the kinds match the values' types.
         let (at, size) = unsafe {
             (
-                ax_value(self.window, "AXPosition", AX_VALUE_CG_POINT, NSPoint::new(0.0, 0.0))?,
-                ax_value(self.window, "AXSize", AX_VALUE_CG_SIZE, NSSize::new(0.0, 0.0))?,
+                ax_value(
+                    self.window,
+                    "AXPosition",
+                    AX_VALUE_CG_POINT,
+                    NSPoint::new(0.0, 0.0),
+                )?,
+                ax_value(
+                    self.window,
+                    "AXSize",
+                    AX_VALUE_CG_SIZE,
+                    NSSize::new(0.0, 0.0),
+                )?,
             )
         };
-        Some(Rect { x: at.x, y: at.y, w: size.width, h: size.height })
+        Some(Rect {
+            x: at.x,
+            y: at.y,
+            w: size.width,
+            h: size.height,
+        })
     }
 
     /// Moves and resizes it, as far as the app lets it.
@@ -367,7 +408,9 @@ unsafe fn copy_attribute(element: CFTypeRef, attribute: &str) -> Option<CFTypeRe
     let mut value: CFTypeRef = std::ptr::null();
     // SAFETY: NSString is toll-free bridged with CFString; `value` is
     // written only on success.
-    let error = unsafe { AXUIElementCopyAttributeValue(element, Retained::as_ptr(&name).cast(), &mut value) };
+    let error = unsafe {
+        AXUIElementCopyAttributeValue(element, Retained::as_ptr(&name).cast(), &mut value)
+    };
     (error == AX_SUCCESS && !value.is_null()).then_some(value)
 }
 

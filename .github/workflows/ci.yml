@@ -9,13 +9,23 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Tinycast is macOS only: its code calls AppKit, so both jobs run on macOS.
 jobs:
-  test:
-    # Tinycast is macOS only: its tests call AppKit and read system bundles.
+  lint:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
-      # The toolchain rust-toolchain.toml pins.
+      # The toolchain rust-toolchain.toml pins, with rustfmt and clippy.
+      - run: rustup toolchain install
+      - run: cargo fmt --check
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --locked -- -D warnings
+
+  test:
+    # Its tests call AppKit and read system bundles.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked

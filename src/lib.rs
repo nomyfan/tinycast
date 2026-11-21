@@ -24,10 +24,10 @@ use nsh_base::{Command, CommandApi, CommandEntry, CommandItem, button, command, 
 use nsh_core::{
     MacOsBackdrop, MacOsBackdropBlending, MacOsBackdropMaterial, MacOsBackdropState,
     desktop::{Display, Key, Shortcut, WindowAttributes, WindowKind, WindowPosition},
-    element::{AdaptiveColor, ImageSrc},
+    element::ImageSrc,
     element::desktop::{
-        MenuItem, WindowRef, current_window, displays, open_window, quit,
-        register_global_shortcut, set_tray, tray, window,
+        MenuItem, WindowRef, current_window, displays, open_window, quit, register_global_shortcut,
+        set_tray, tray, window,
     },
     prelude::*,
 };
@@ -36,9 +36,8 @@ use crate::{
     apps::AppEntry,
     clipboard::ClipEntry,
     mac::shared_hotkey::SharedHotKey,
-    scripts::{OutputMode, Outcome, Script, ScriptIcon},
+    scripts::{Outcome, OutputMode, Script, ScriptIcon},
 };
-
 
 /// The app's UI set (`nsh.json` `"rust"`).
 #[native_module("tinycast/native")]
@@ -171,7 +170,9 @@ impl Launcher {
         }
         self.close();
         if !accessibility_granted() {
-            return log::warn!("Tinycast needs Accessibility access to paste; the text is on the clipboard");
+            return log::warn!(
+                "Tinycast needs Accessibility access to paste; the text is on the clipboard"
+            );
         }
         // On a thread of its own: the popup's owner goes with the popup.
         blocking(|| {
@@ -205,7 +206,9 @@ impl Launcher {
     fn rescan_scripts(self) {
         self.owner.run(|| {
             spawn(async move {
-                let Ok(found) = blocking(scripts::scan).await else { return };
+                let Ok(found) = blocking(scripts::scan).await else {
+                    return;
+                };
                 if self.scripts.with_untracked(|scripts| *scripts != found) {
                     self.scripts.set(found);
                 }
@@ -216,7 +219,10 @@ impl Launcher {
     /// Runs the script of launcher row `id`: in the output view, or with
     /// the popup closed and its last line of output in the HUD.
     fn run_script(self, id: &str) {
-        let Some(script) = self.scripts.with_untracked(|s| s.iter().find(|s| s.id == id).cloned()) else {
+        let Some(script) = self
+            .scripts
+            .with_untracked(|s| s.iter().find(|s| s.id == id).cloned())
+        else {
             return;
         };
         match script.mode {
@@ -240,7 +246,9 @@ impl Launcher {
                             }
                         }
                         let outcome = run.outcome().await;
-                        if let Some((message, failed)) = hud_message(&script.name, last_line, outcome) {
+                        if let Some((message, failed)) =
+                            hud_message(&script.name, last_line, outcome)
+                        {
                             self.hud.show(&message, failed);
                         }
                     });
@@ -318,9 +326,17 @@ pub fn App() -> impl IntoElement {
         launcher.settings.with(|s| {
             let mut hotkeys = vec![
                 (s.config.hotkeys.launcher.clone(), Action::Show(Mode::Apps)),
-                (s.config.hotkeys.clipboard.clone(), Action::Show(Mode::Clipboard)),
+                (
+                    s.config.hotkeys.clipboard.clone(),
+                    Action::Show(Mode::Clipboard),
+                ),
             ];
-            hotkeys.extend(s.config.window.iter().map(|(&command, keys)| (keys.clone(), Action::Window(command))));
+            hotkeys.extend(
+                s.config
+                    .window
+                    .iter()
+                    .map(|(&command, keys)| (keys.clone(), Action::Window(command))),
+            );
             hotkeys
         })
     });
@@ -340,7 +356,9 @@ pub fn App() -> impl IntoElement {
                 // With its shortcut on, Spotlight gets ⌘Space whatever is
                 // registered.
                 if is_cmd_space(&key)
-                    && blocking(mac::spotlight_takes_cmd_space).await.unwrap_or(false)
+                    && blocking(mac::spotlight_takes_cmd_space)
+                        .await
+                        .unwrap_or(false)
                 {
                     return report(format!(
                         "{key} is held by Spotlight: turn its shortcut off in System Settings"
@@ -356,7 +374,9 @@ pub fn App() -> impl IntoElement {
                     .ok()
                     .and_then(|shortcut| SharedHotKey::register(&shortcut, pressed));
                 let hot_key = match shared {
-                    Some((hot_key, registered)) => registered.await.unwrap_or(false).then_some(hot_key),
+                    Some((hot_key, registered)) => {
+                        registered.await.unwrap_or(false).then_some(hot_key)
+                    }
                     None => None,
                 };
                 // Kept until the task ends.
@@ -422,9 +442,8 @@ pub fn App() -> impl IntoElement {
 
 /// Whether `key` is ⌘Space, Spotlight's shortcut, however it is written.
 fn is_cmd_space(key: &str) -> bool {
-    Shortcut::parse(key, true).is_ok_and(|s| {
-        s.key == Key::Space && s.meta && !s.alt && !s.ctrl && !s.shift
-    })
+    Shortcut::parse(key, true)
+        .is_ok_and(|s| s.key == Key::Space && s.meta && !s.alt && !s.ctrl && !s.shift)
 }
 
 /// The display the mouse pointer is on, where the popup and the HUD open.
@@ -460,7 +479,8 @@ pub(crate) fn frosted_glass() -> MacOsBackdrop {
 /// Over `frosted_glass`: a thin wash of the theme's surface, which keeps
 /// text legible on busy backgrounds, and an edge, all that outlines a
 /// window without a shadow.
-pub(crate) const FROSTED_GLASS_CLASS: &str = "border border-foreground/10 bg-popover/55 text-popover-foreground";
+pub(crate) const FROSTED_GLASS_CLASS: &str =
+    "border border-foreground/10 bg-popover/55 text-popover-foreground";
 
 fn popup_content(launcher: Launcher) -> impl IntoElement {
     current_window().on_focus_change(move |focused| {
@@ -504,13 +524,18 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
             CommandItem::new(CLIPBOARD_COMMAND, "Clipboard History")
                 .group("Commands")
                 .keywords(["paste", "剪贴板"])
-                .shortcut(launcher.settings.with(|s| s.config.hotkeys.clipboard.clone())),
+                .shortcut(
+                    launcher
+                        .settings
+                        .with(|s| s.config.hotkeys.clipboard.clone()),
+                ),
         );
         launcher.settings.with(|s| {
             items.extend(window::Command::ALL.map(|command| {
-                let item = CommandItem::new(format!("{WINDOW_PREFIX}{}", command.id()), command.title())
-                    .group("Window Management")
-                    .keywords(["window", "窗口"]);
+                let item =
+                    CommandItem::new(format!("{WINDOW_PREFIX}{}", command.id()), command.title())
+                        .group("Window Management")
+                        .keywords(["window", "窗口"]);
                 match s.config.window.get(&command) {
                     Some(keys) => item.shortcut(keys.clone()),
                     None => item,
@@ -519,7 +544,12 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
         });
         launcher.scripts.with(|scripts| {
             items.extend(scripts.iter().map(|script| {
-                let file_stem = script.path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+                let file_stem = script
+                    .path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
                 CommandItem::new(script.id.clone(), script.name.clone())
                     .group("Scripts")
                     .keywords([file_stem, "script".into(), "脚本".into()])
@@ -531,7 +561,9 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 if q.trim().is_empty() {
                     return recent::recent_first(items, recent, now);
                 }
-                search::rank(items, q, |id| recent.get(id).map_or(0, |times| recent::bonus(times, now)))
+                search::rank(items, q, |id| {
+                    recent.get(id).map_or(0, |times| recent::bonus(times, now))
+                })
             })
         })
     };
@@ -548,7 +580,10 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 launcher.mode.set(Mode::Clipboard);
             } else if let Some(path) = id.strip_prefix("app:") {
                 launcher.launch(path);
-            } else if let Some(command) = id.strip_prefix(WINDOW_PREFIX).and_then(window::Command::from_id) {
+            } else if let Some(command) = id
+                .strip_prefix(WINDOW_PREFIX)
+                .and_then(window::Command::from_id)
+            {
                 launcher.close();
                 window::run(command);
             } else if id.starts_with(SCRIPT_PREFIX) {
@@ -561,7 +596,10 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
             // The window commands' rows show their layout, the scripts' their
             // own icon, the other commands' rows (no `app:` id) the clipboard
             // glyph.
-            let script_id = entry.id.starts_with(SCRIPT_PREFIX).then(|| entry.id.to_string());
+            let script_id = entry
+                .id
+                .starts_with(SCRIPT_PREFIX)
+                .then(|| entry.id.to_string());
             let path = entry.id.strip_prefix("app:").map(str::to_owned);
             let layout_icon = entry
                 .id
@@ -570,7 +608,10 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 .map(|command| icons::svg_uri(&command.icon_svg()));
             let running = {
                 let path = path.clone();
-                move || path.as_ref().is_some_and(|p| launcher.running.with(|r| r.contains(p)))
+                move || {
+                    path.as_ref()
+                        .is_some_and(|p| launcher.running.with(|r| r.contains(p)))
+                }
             };
             let src = reactive_src(move || {
                 if layout_icon.is_some() {
@@ -578,7 +619,9 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                 }
                 let path = path.as_deref()?;
                 launcher.apps.with(|apps| {
-                    apps.iter().find(|a| a.path == path).and_then(|a| a.icon.clone())
+                    apps.iter()
+                        .find(|a| a.path == path)
+                        .and_then(|a| a.icon.clone())
                 })
             });
             view()
@@ -593,7 +636,10 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
                         .child(match script_id {
                             Some(id) => dynamic(move || {
                                 let icon = launcher.scripts.with(|scripts| {
-                                    scripts.iter().find(|s| s.id == id).map_or(ScriptIcon::Default, |s| s.icon.clone())
+                                    scripts
+                                        .iter()
+                                        .find(|s| s.id == id)
+                                        .map_or(ScriptIcon::Default, |s| s.icon.clone())
                                 });
                                 script_view::script_icon(icon)
                             })
@@ -619,12 +665,17 @@ fn app_palette(launcher: Launcher) -> impl IntoElement {
 /// An image source that follows `icon`: the PNG it names, or the
 /// clipboard glyph while there is none (an app whose icon is not made yet,
 /// an entry copied from no known app).
-pub(crate) fn reactive_src(icon: impl Fn() -> Option<String> + 'static) -> impl Fn() -> ImageSrc + 'static {
+pub(crate) fn reactive_src(
+    icon: impl Fn() -> Option<String> + 'static,
+) -> impl Fn() -> ImageSrc + 'static {
     move || ImageSrc::from(icon().unwrap_or_else(|| icons::svg_uri(icons::CLIPBOARD_SVG)))
 }
 
 pub(crate) fn row_icon(src: impl Fn() -> ImageSrc + 'static) -> impl IntoElement {
-    image(src).w(px(22.0)).h(px(22.0)).object_fit(ResizeMode::Contain)
+    image(src)
+        .w(px(22.0))
+        .h(px(22.0))
+        .object_fit(ResizeMode::Contain)
 }
 
 /// The search bar's way back to the launcher's list, as Raycast's views
@@ -644,7 +695,7 @@ pub(crate) fn back_button(launcher: Launcher) -> impl IntoElement {
             image(icons::svg_uri(icons::BACK_SVG))
                 .w(px(16.0))
                 .h(px(16.0))
-                .tint_color(move || AdaptiveColor::from(theme().foreground)),
+                .tint_color(move || theme().foreground),
         )
 }
 
@@ -671,10 +722,19 @@ mod tests {
     #[test]
     fn the_hud_says_the_last_line_and_why_it_failed_or_nothing() {
         let line = || Some("Dark mode on".to_owned());
-        assert_eq!(hud_message("Dark", line(), Outcome::Succeeded), Some(("Dark mode on".into(), false)));
+        assert_eq!(
+            hud_message("Dark", line(), Outcome::Succeeded),
+            Some(("Dark mode on".into(), false))
+        );
         assert_eq!(hud_message("Dark", None, Outcome::Succeeded), None);
         let failed = || Outcome::Failed("Exit code 1".into());
-        assert_eq!(hud_message("Dark", line(), failed()), Some(("Exit code 1: Dark mode on".into(), true)));
-        assert_eq!(hud_message("Dark", None, failed()), Some(("Dark: Exit code 1".into(), true)));
+        assert_eq!(
+            hud_message("Dark", line(), failed()),
+            Some(("Exit code 1: Dark mode on".into(), true))
+        );
+        assert_eq!(
+            hud_message("Dark", None, failed()),
+            Some(("Dark: Exit code 1".into(), true))
+        );
     }
 }

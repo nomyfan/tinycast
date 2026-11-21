@@ -52,7 +52,7 @@ const ENV_TEMPLATE: &str = r#"# Variables the scripts in ./scripts/ run with. Sa
 # environment; values in single quotes are kept as they are.
 "#;
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub hotkeys: Hotkeys,
@@ -70,15 +70,12 @@ pub struct Hotkeys {
     pub clipboard: String,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Config { hotkeys: Hotkeys::default(), window: BTreeMap::new() }
-    }
-}
-
 impl Default for Hotkeys {
     fn default() -> Self {
-        Hotkeys { launcher: "alt+space".into(), clipboard: "alt+shift+v".into() }
+        Hotkeys {
+            launcher: "alt+space".into(),
+            clipboard: "alt+shift+v".into(),
+        }
     }
 }
 
@@ -119,11 +116,18 @@ pub fn load() -> Loaded {
     };
     let path = script_path();
     let text = read_or_create(&env_path(), ENV_TEMPLATE).unwrap_or_else(|error| {
-        loaded.problems.push(format!("Could not read .env: {error}"));
+        loaded
+            .problems
+            .push(format!("Could not read .env: {error}"));
         String::new()
     });
-    let (vars, problems) =
-        dotenv::parse(&text, |name| if name == "PATH" { Some(path.clone()) } else { std::env::var(name).ok() });
+    let (vars, problems) = dotenv::parse(&text, |name| {
+        if name == "PATH" {
+            Some(path.clone())
+        } else {
+            std::env::var(name).ok()
+        }
+    });
     loaded.env = vec![("PATH".to_owned(), path)];
     loaded.env.extend(vars);
     loaded.problems.extend(problems);
@@ -134,7 +138,8 @@ pub fn load() -> Loaded {
 fn read_or_create(path: &std::path::Path, template: &str) -> std::io::Result<String> {
     match std::fs::read_to_string(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let written = std::fs::create_dir_all(dir()).and_then(|()| std::fs::write(path, template));
+            let written =
+                std::fs::create_dir_all(dir()).and_then(|()| std::fs::write(path, template));
             if let Err(error) = written {
                 log::warn!("could not write {}: {error}", path.display());
             }
@@ -167,12 +172,22 @@ fn parse(text: &str) -> Loaded {
     let mut problems = Vec::new();
     let defaults = Hotkeys::default();
     for (name, keys, default) in [
-        ("launcher", &mut config.hotkeys.launcher, defaults.launcher.clone()),
-        ("clipboard", &mut config.hotkeys.clipboard, defaults.clipboard.clone()),
+        (
+            "launcher",
+            &mut config.hotkeys.launcher,
+            defaults.launcher.clone(),
+        ),
+        (
+            "clipboard",
+            &mut config.hotkeys.clipboard,
+            defaults.clipboard.clone(),
+        ),
     ] {
         // `register_global_shortcut` panics on a keystroke that is not one.
         if let Err(error) = Shortcut::parse(keys, true) {
-            problems.push(format!("hotkeys.{name} \"{keys}\" is not a keystroke ({error})"));
+            problems.push(format!(
+                "hotkeys.{name} \"{keys}\" is not a keystroke ({error})"
+            ));
             *keys = default;
         }
     }
@@ -187,15 +202,21 @@ fn parse(text: &str) -> Loaded {
     config.window.retain(|command, keys| {
         let name = command.id();
         match Shortcut::parse(keys, true) {
-            Err(error) => problems.push(format!("window.{name} \"{keys}\" is not a keystroke ({error})")),
-            Ok(shortcut) if !taken.insert(shortcut) => {
-                problems.push(format!("window.{name} \"{keys}\" is already another shortcut"))
-            }
+            Err(error) => problems.push(format!(
+                "window.{name} \"{keys}\" is not a keystroke ({error})"
+            )),
+            Ok(shortcut) if !taken.insert(shortcut) => problems.push(format!(
+                "window.{name} \"{keys}\" is already another shortcut"
+            )),
             Ok(_) => return true,
         }
         false
     });
-    Loaded { config, env: Vec::new(), problems }
+    Loaded {
+        config,
+        env: Vec::new(),
+        problems,
+    }
 }
 
 /// Reloads `loaded` whenever the config or the `.env` file is saved, while
@@ -248,7 +269,10 @@ mod tests {
     #[test]
     fn window_shortcuts_are_read() {
         let loaded = parse("[window]\nleft-half = \"ctrl+alt+left\"\n");
-        assert_eq!(loaded.config.window[&window::Command::LeftHalf], "ctrl+alt+left");
+        assert_eq!(
+            loaded.config.window[&window::Command::LeftHalf],
+            "ctrl+alt+left"
+        );
         assert!(loaded.problems.is_empty());
     }
 
@@ -264,11 +288,19 @@ mod tests {
 
     #[test]
     fn an_unknown_window_command_is_reported() {
-        assert_eq!(parse("[window]\nleft-halve = \"ctrl+alt+left\"\n").problems.len(), 1);
+        assert_eq!(
+            parse("[window]\nleft-halve = \"ctrl+alt+left\"\n")
+                .problems
+                .len(),
+            1
+        );
     }
 
     #[test]
     fn unknown_settings_are_reported() {
-        assert_eq!(parse("[hotkey]\nlauncher = \"cmd+space\"\n").problems.len(), 1);
+        assert_eq!(
+            parse("[hotkey]\nlauncher = \"cmd+space\"\n").problems.len(),
+            1
+        );
     }
 }

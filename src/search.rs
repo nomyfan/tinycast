@@ -22,7 +22,11 @@ const GAP: i32 = 1;
 /// How well `text` matches `query`, `None` when it does not: the best
 /// alignment of the query's characters over the text's.
 pub(crate) fn score(query: &str, text: &str) -> Option<i32> {
-    let query: Vec<char> = query.chars().filter(|c| !c.is_whitespace()).map(fold).collect();
+    let query: Vec<char> = query
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .map(fold)
+        .collect();
     if query.is_empty() {
         return Some(0);
     }
@@ -78,7 +82,11 @@ fn bonus(chars: &[char], j: usize) -> i32 {
 /// tie goes to the shorter text, then to the earlier item), out of their
 /// groups: one list ranked across them. `boost` adds to the score of an
 /// item by its id (a recent one's).
-pub(crate) fn rank(items: Vec<CommandItem>, query: &str, boost: impl Fn(&str) -> i32) -> Vec<CommandItem> {
+pub(crate) fn rank(
+    items: Vec<CommandItem>,
+    query: &str,
+    boost: impl Fn(&str) -> i32,
+) -> Vec<CommandItem> {
     let mut ranked: Vec<_> = items
         .into_iter()
         .filter_map(|item| {
@@ -134,13 +142,19 @@ mod tests {
             CommandItem::new("a", "Sticky Notes").group("Applications"),
             CommandItem::new("b", "Safari").group("Applications"),
             CommandItem::new("c", "Notes").group("Applications"),
-            CommandItem::new("d", "QQ音乐").keywords(["QQMusic"]).group("Applications"),
+            CommandItem::new("d", "QQ音乐")
+                .keywords(["QQMusic"])
+                .group("Applications"),
         ];
         let ids = |items: Vec<CommandItem>| items.into_iter().map(|i| i.id).collect::<Vec<_>>();
         let none = |_: &str| 0;
         assert_eq!(ids(rank(items.clone(), "note", none)), ["c", "a"]);
         assert_eq!(ids(rank(items.clone(), "qq music", none)), ["d"]);
-        assert!(rank(items.clone(), "note", none).iter().all(|i| i.group.is_none()));
+        assert!(
+            rank(items.clone(), "note", none)
+                .iter()
+                .all(|i| i.group.is_none())
+        );
         // A recent item passes a match about as good.
         let recent = |id: &str| if id == "a" { 10 } else { 0 };
         assert_eq!(ids(rank(items, "note", recent)), ["a", "c"]);

@@ -149,7 +149,10 @@ impl Command {
     }
 
     fn is_third(self) -> bool {
-        matches!(self, FirstThird | CenterThird | LastThird | FirstTwoThirds | LastTwoThirds)
+        matches!(
+            self,
+            FirstThird | CenterThird | LastThird | FirstTwoThirds | LastTwoThirds
+        )
     }
 
     /// Where it puts a window at `window`, given the displays' visible
@@ -159,19 +162,35 @@ impl Command {
         let area = display_of(window, displays);
         if let Some(part) = self.region() {
             // On a portrait display thirds stack, as Raycast's do.
-            let part = if self.is_third() && area.h > area.w { part.transposed() } else { part };
+            let part = if self.is_third() && area.h > area.w {
+                part.transposed()
+            } else {
+                part
+            };
             return Some(area.part(part).rounded());
         }
         match self {
             Center => {
                 let (w, h) = (window.w.min(area.w), window.h.min(area.h));
-                Some(Rect { x: area.x + (area.w - w) / 2.0, y: area.y + (area.h - h) / 2.0, w, h }.rounded())
+                Some(
+                    Rect {
+                        x: area.x + (area.w - w) / 2.0,
+                        y: area.y + (area.h - h) / 2.0,
+                        w,
+                        h,
+                    }
+                    .rounded(),
+                )
             }
             NextDisplay | PreviousDisplay => {
                 let mut order = displays.to_vec();
                 order.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
                 let at = order.iter().position(|d| *d == area)?;
-                let step = if self == NextDisplay { 1 } else { order.len() - 1 };
+                let step = if self == NextDisplay {
+                    1
+                } else {
+                    order.len() - 1
+                };
                 let to = order[(at + step) % order.len()];
                 // The same place and size relative to the display, kept on it.
                 let w = (window.w / area.w).min(1.0);
@@ -187,11 +206,19 @@ impl Command {
     /// Its launcher icon: a screen on a blue tile, the part the window
     /// takes filled, as app icons are drawn.
     pub fn icon_svg(self) -> String {
-        const SCREEN: Rect = Rect { x: 4.5, y: 6.0, w: 15.0, h: 12.0 };
+        const SCREEN: Rect = Rect {
+            x: 4.5,
+            y: 6.0,
+            w: 15.0,
+            h: 12.0,
+        };
         let mark = match self.region() {
             Some(part) => {
                 let r = SCREEN.part(part);
-                format!("<rect x='{}' y='{}' width='{}' height='{}' rx='1' fill='#FFFFFF'/>", r.x, r.y, r.w, r.h)
+                format!(
+                    "<rect x='{}' y='{}' width='{}' height='{}' rx='1' fill='#FFFFFF'/>",
+                    r.x, r.y, r.w, r.h
+                )
             }
             None => {
                 let path = match self {
@@ -224,7 +251,8 @@ impl Command {
 impl<'de> Deserialize<'de> for Command {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let id = String::deserialize(deserializer)?;
-        Command::from_id(&id).ok_or_else(|| D::Error::custom(format!("\"{id}\" is not a window command")))
+        Command::from_id(&id)
+            .ok_or_else(|| D::Error::custom(format!("\"{id}\" is not a window command")))
     }
 }
 
@@ -241,7 +269,12 @@ pub struct Rect {
 impl Rect {
     fn from_bounds(b: Bounds<Points>) -> Rect {
         let (x, y) = (b.origin.x.0 as f64, b.origin.y.0 as f64);
-        Rect { x, y, w: b.size.width.0 as f64, h: b.size.height.0 as f64 }
+        Rect {
+            x,
+            y,
+            w: b.size.width.0 as f64,
+            h: b.size.height.0 as f64,
+        }
     }
 
     /// The part of `self` at `part`'s fractions of it.
@@ -255,11 +288,21 @@ impl Rect {
     }
 
     fn rounded(self) -> Rect {
-        Rect { x: self.x.round(), y: self.y.round(), w: self.w.round(), h: self.h.round() }
+        Rect {
+            x: self.x.round(),
+            y: self.y.round(),
+            w: self.w.round(),
+            h: self.h.round(),
+        }
     }
 
     fn transposed(self) -> Rect {
-        Rect { x: self.y, y: self.x, w: self.h, h: self.w }
+        Rect {
+            x: self.y,
+            y: self.x,
+            w: self.h,
+            h: self.w,
+        }
     }
 
     fn overlap(self, other: Rect) -> f64 {
@@ -302,7 +345,10 @@ pub fn run(command: Command) {
     let Some(pid) = crate::mac::frontmost_pid() else {
         return;
     };
-    let areas: Vec<Rect> = displays().into_iter().map(|d| Rect::from_bounds(d.visible_bounds)).collect();
+    let areas: Vec<Rect> = displays()
+        .into_iter()
+        .map(|d| Rect::from_bounds(d.visible_bounds))
+        .collect();
     if areas.is_empty() {
         return;
     }
@@ -342,7 +388,11 @@ fn apply(command: Command, pid: i32, displays: &[Rect]) {
                 Some(last) if last.after == frame => last.before,
                 _ => frame,
             };
-            moved.push(Moved { window, before, after });
+            moved.push(Moved {
+                window,
+                before,
+                after,
+            });
             if moved.len() > REMEMBERED {
                 moved.remove(0);
             }
@@ -359,7 +409,9 @@ fn place(window: &AxWindow, frame: Rect, target: Rect, displays: &[Rect]) {
     // Moved to another display, a window keeps to the old one's size for a
     // moment (some 60 ms): sized again until it takes the new one's.
     let start = Instant::now();
-    while window.frame().is_some_and(|f| f != target) && start.elapsed() < Duration::from_millis(500) {
+    while window.frame().is_some_and(|f| f != target)
+        && start.elapsed() < Duration::from_millis(500)
+    {
         thread::sleep(Duration::from_millis(20));
         window.set_frame(target);
     }
@@ -369,8 +421,18 @@ fn place(window: &AxWindow, frame: Rect, target: Rect, displays: &[Rect]) {
 mod tests {
     use super::*;
 
-    const WIDE: Rect = Rect { x: 0.0, y: 25.0, w: 1440.0, h: 875.0 };
-    const TALL: Rect = Rect { x: 1440.0, y: 0.0, w: 1080.0, h: 1920.0 };
+    const WIDE: Rect = Rect {
+        x: 0.0,
+        y: 25.0,
+        w: 1440.0,
+        h: 875.0,
+    };
+    const TALL: Rect = Rect {
+        x: 1440.0,
+        y: 0.0,
+        w: 1080.0,
+        h: 1920.0,
+    };
 
     #[test]
     fn ids_name_the_commands() {
@@ -381,46 +443,99 @@ mod tests {
 
     #[test]
     fn halves_take_the_visible_area() {
-        let window = Rect { x: 100.0, y: 100.0, w: 400.0, h: 300.0 };
+        let window = Rect {
+            x: 100.0,
+            y: 100.0,
+            w: 400.0,
+            h: 300.0,
+        };
         assert_eq!(
             RightHalf.layout(window, &[WIDE]),
-            Some(Rect { x: 720.0, y: 25.0, w: 720.0, h: 875.0 })
+            Some(Rect {
+                x: 720.0,
+                y: 25.0,
+                w: 720.0,
+                h: 875.0
+            })
         );
     }
 
     #[test]
     fn thirds_stack_on_a_portrait_display() {
-        let window = Rect { x: 1500.0, y: 100.0, w: 400.0, h: 300.0 };
+        let window = Rect {
+            x: 1500.0,
+            y: 100.0,
+            w: 400.0,
+            h: 300.0,
+        };
         assert_eq!(
             FirstThird.layout(window, &[WIDE, TALL]),
-            Some(Rect { x: 1440.0, y: 0.0, w: 1080.0, h: 640.0 })
+            Some(Rect {
+                x: 1440.0,
+                y: 0.0,
+                w: 1080.0,
+                h: 640.0
+            })
         );
     }
 
     #[test]
     fn center_keeps_the_size_that_fits() {
-        let window = Rect { x: 0.0, y: 25.0, w: 400.0, h: 2000.0 };
+        let window = Rect {
+            x: 0.0,
+            y: 25.0,
+            w: 400.0,
+            h: 2000.0,
+        };
         assert_eq!(
             Center.layout(window, &[WIDE]),
-            Some(Rect { x: 520.0, y: 25.0, w: 400.0, h: 875.0 })
+            Some(Rect {
+                x: 520.0,
+                y: 25.0,
+                w: 400.0,
+                h: 875.0
+            })
         );
     }
 
     #[test]
     fn next_display_keeps_the_relative_place_and_wraps() {
-        let left_half = Rect { x: 0.0, y: 25.0, w: 720.0, h: 875.0 };
+        let left_half = Rect {
+            x: 0.0,
+            y: 25.0,
+            w: 720.0,
+            h: 875.0,
+        };
         assert_eq!(
             NextDisplay.layout(left_half, &[TALL, WIDE]),
-            Some(Rect { x: 1440.0, y: 0.0, w: 540.0, h: 1920.0 })
+            Some(Rect {
+                x: 1440.0,
+                y: 0.0,
+                w: 540.0,
+                h: 1920.0
+            })
         );
-        let on_tall = Rect { x: 1440.0, y: 0.0, w: 540.0, h: 1920.0 };
+        let on_tall = Rect {
+            x: 1440.0,
+            y: 0.0,
+            w: 540.0,
+            h: 1920.0,
+        };
         assert_eq!(NextDisplay.layout(on_tall, &[TALL, WIDE]), Some(left_half));
-        assert_eq!(PreviousDisplay.layout(on_tall, &[TALL, WIDE]), Some(left_half));
+        assert_eq!(
+            PreviousDisplay.layout(on_tall, &[TALL, WIDE]),
+            Some(left_half)
+        );
     }
 
     #[test]
     fn a_window_off_every_display_goes_on_the_first() {
-        let window = Rect { x: -5000.0, y: 0.0, w: 400.0, h: 300.0 };
+        let window = Rect {
+            x: -5000.0,
+            y: 0.0,
+            w: 400.0,
+            h: 300.0,
+        };
         assert_eq!(Maximize.layout(window, &[WIDE, TALL]), Some(WIDE));
     }
 }

@@ -24,7 +24,10 @@ enum Status {
 }
 
 pub(crate) fn script_view(launcher: Launcher) -> impl IntoElement {
-    let script = launcher.script.get().expect("Mode::Output comes with its script");
+    let script = launcher
+        .script
+        .get()
+        .expect("Mode::Output comes with its script");
     let lines = signal(Vec::<String>::new());
     let status = signal(Status::Running);
     let output = element_ref();
@@ -52,7 +55,10 @@ pub(crate) fn script_view(launcher: Launcher) -> impl IntoElement {
 
     // No palette here to answer Escape (the popup's `close_on_escape` is
     // off): back to the launcher's list.
-    let always = KeyOptions { when: When::Always, ..KeyOptions::default() };
+    let always = KeyOptions {
+        when: When::Always,
+        ..KeyOptions::default()
+    };
     on_key_with("escape", always, move |_| launcher.back());
 
     view()
@@ -67,14 +73,21 @@ pub(crate) fn script_view(launcher: Launcher) -> impl IntoElement {
                 .app_class("border-b border-foreground/10")
                 .child(back_button(launcher))
                 .child(script_icon(script.icon.clone()))
-                .child(text(script.name.clone()).flex_1().app_class("text-base").number_of_lines(1))
-                .child(text(move || status_label(&status.get())).app_class(move || {
-                    let color = match status.get() {
-                        Status::Done(Outcome::Failed(_)) => "text-destructive",
-                        _ => "text-muted-foreground",
-                    };
-                    Some(format!("text-sm {color}").into())
-                })),
+                .child(
+                    text(script.name.clone())
+                        .flex_1()
+                        .app_class("text-base")
+                        .number_of_lines(1),
+                )
+                .child(
+                    text(move || status_label(&status.get())).app_class(move || {
+                        let color = match status.get() {
+                            Status::Done(Outcome::Failed(_)) => "text-destructive",
+                            _ => "text-muted-foreground",
+                        };
+                        Some(format!("text-sm {color}").into())
+                    }),
+                ),
         )
         .child(
             scroll().element_ref(&output).flex_1().child(
@@ -109,6 +122,8 @@ pub(crate) fn script_icon(icon: ScriptIcon) -> AnyElement {
             .child(text(emoji).app_class("text-base").number_of_lines(1))
             .into_element(),
         ScriptIcon::Image(src) => row_icon(move || ImageSrc::from(src.clone())).into_element(),
-        ScriptIcon::Default => row_icon(|| ImageSrc::from(icons::svg_uri(icons::SCRIPT_SVG))).into_element(),
+        ScriptIcon::Default => {
+            row_icon(|| ImageSrc::from(icons::svg_uri(icons::SCRIPT_SVG))).into_element()
+        }
     }
 }

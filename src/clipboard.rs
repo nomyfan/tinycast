@@ -154,7 +154,10 @@ pub fn watch(history: Signal<Vec<ClipEntry>>) {
 fn read_image() -> Option<ClipImage> {
     let image = mac::read_image()?;
     if image.png.len() > MAX_IMAGE_BYTES {
-        log::info!("an image of {} bytes is left out of the history", image.png.len());
+        log::info!(
+            "an image of {} bytes is left out of the history",
+            image.png.len()
+        );
         return None;
     }
     let mut hasher = DefaultHasher::new();
@@ -203,7 +206,11 @@ fn add(history: Signal<Vec<ClipEntry>>, mut entry: ClipEntry) {
 }
 
 fn remove_images(entries: Vec<ClipEntry>) {
-    let files: Vec<String> = entries.into_iter().filter_map(|e| e.image).map(|i| i.file).collect();
+    let files: Vec<String> = entries
+        .into_iter()
+        .filter_map(|e| e.image)
+        .map(|i| i.file)
+        .collect();
     if !files.is_empty() {
         blocking(move || {
             for file in files {
