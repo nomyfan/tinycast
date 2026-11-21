@@ -105,7 +105,13 @@ Data: `~/Library/Application Support/Tinycast/` (`history.json`, `images/`), ico
   heading outside the `Command`.
 - The popup is frosted glass (`macos_backdrop` with `BehindWindow`, state `Active` since the app is never active,
   over `bg-popover/55`). Opaque theme colors (`accent`, `muted`, `border`) look like white slabs in light mode on
-  it: use translucent foreground shades (`bg-foreground/10`, `border-foreground/10`).
+  it: use translucent foreground shades (`bg-foreground/10`, `border-foreground/10`). It has the system window
+  shadow, which outlines it in light mode, so its border is dark mode's only (`SHADOWED_GLASS_CLASS`); the HUD has
+  no shadow and keeps it in both.
+- A window opened with `open_window` is laid out once at the hidden main window's size (1200×800) a few frames after
+  it shows; the window keeps its size and cuts the content off. Content that fills the window by stretching
+  (`flex_1`) overruns it for that frame (the popup's bottom and right corners showed square), so the popup's
+  surface has a fixed size (`POPUP_WIDTH`/`POPUP_HEIGHT`, the window's `default_size` too).
 
 ## References
 

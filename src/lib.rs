@@ -110,16 +110,16 @@ impl Launcher {
         // A non-activating panel: the app in front stays in front.
         attributes.activate = Some(false);
         // The content draws the rounded surface; the window around it shows
-        // nothing. No system shadow: it rims the popup with a dark line.
+        // nothing. The system shadow follows the surface's shape.
         attributes.transparent = Some(true);
-        attributes.shadow = Some(false);
+        attributes.shadow = Some(true);
         // The palette answers Escape: it clears the query, then goes back
         // or closes the popup (`on_cancel`).
         attributes.close_on_escape = Some(false);
         let mut options = window()
             .id("launcher")
             .kind(WindowKind::Popup)
-            .default_size(size(px(760.0), px(460.0)))
+            .default_size(size(px(POPUP_WIDTH), px(POPUP_HEIGHT)))
             .default_position(WindowPosition::Center)
             .attributes(attributes)
             .on_open_change(move |_| {
@@ -467,7 +467,7 @@ pub(crate) fn mouse_display() -> Option<Display> {
 /// Frosted glass, as Raycast and Spotlight: the popover material blurs what
 /// is behind the (transparent) window. Always active: Tinycast is never the
 /// active app, and an inactive material is flat gray. The popup and the HUD
-/// wear it, with `FROSTED_GLASS_CLASS`.
+/// wear it, with `FROSTED_GLASS_CLASS` or `SHADOWED_GLASS_CLASS`.
 pub(crate) fn frosted_glass() -> MacOsBackdrop {
     let mut backdrop = MacOsBackdrop::default();
     backdrop.material = MacOsBackdropMaterial::Popover;
@@ -478,9 +478,21 @@ pub(crate) fn frosted_glass() -> MacOsBackdrop {
 
 /// Over `frosted_glass`: a thin wash of the theme's surface, which keeps
 /// text legible on busy backgrounds, and an edge, all that outlines a
-/// window without a shadow.
+/// window without a shadow (the HUD).
 pub(crate) const FROSTED_GLASS_CLASS: &str =
     "border border-foreground/10 bg-popover/55 text-popover-foreground";
+
+/// `FROSTED_GLASS_CLASS` for a window with the system shadow (the popup):
+/// in light mode the shadow's dark rim is the edge, and a dark border
+/// beside it made a heavy line; in dark mode a light edge sets the popup
+/// off its shadow. No border at all in light mode: a transparent one left
+/// a gap between the edge and the dividers running to it.
+const SHADOWED_GLASS_CLASS: &str =
+    "dark:border dark:border-foreground/10 bg-popover/55 text-popover-foreground";
+
+/// The popup's size: its window's and its surface's.
+const POPUP_WIDTH: f32 = 760.0;
+const POPUP_HEIGHT: f32 = 460.0;
 
 fn popup_content(launcher: Launcher) -> impl IntoElement {
     current_window().on_focus_change(move |focused| {
@@ -489,12 +501,16 @@ fn popup_content(launcher: Launcher) -> impl IntoElement {
         }
     });
     view()
-        .flex_1()
+        // Its own size, not the window's: as the popup opens, nsh lays the
+        // window's root out once at the hidden main window's size
+        // (1200×800), which overran the window with the surface, its bottom
+        // and right corners cut square, for a frame (longbridge/nsh#2764).
+        .w(px(POPUP_WIDTH))
+        .h(px(POPUP_HEIGHT))
         .rounded(px(14.0))
         .overflow_hidden()
         .macos_backdrop(frosted_glass())
-        // The edge is all that outlines the popup: the window has no shadow.
-        .app_class(FROSTED_GLASS_CLASS)
+        .app_class(SHADOWED_GLASS_CLASS)
         .child(dynamic(move || match launcher.mode.get() {
             Mode::Apps => app_palette(launcher).into_element(),
             Mode::Clipboard => clipboard_view::clipboard_view(launcher).into_element(),
