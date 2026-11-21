@@ -4,6 +4,7 @@
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { crc32, deflateSync } from 'node:zlib';
 
 const out = dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +26,13 @@ const BOBBER = { cx: 512, cy: 544, r: 205, tilt: 8 };   // tilt in degrees, cloc
 const LINE = { width: 10, length: 280 };                // runs up along the tilt, past the top edge
 const TRAY = { r: 6.6, stroke: 1.5, tilt: 15 };         // 18 pt template
 
+// ── Background texture ─────────────────────────────────────────────────────
+// Ripples spreading from the bobber, lit from the top left, over a fine grain. Both are drawn here into
+// PNGs embedded in the SVG (no <filter>, so every renderer draws them alike). Strengths are the most
+// a pixel is lightened or darkened (0–1).
+const RIPPLE = { strength: 0.07, wavelength: 46, fade: 260 };  // wavelength grows outward; fade: px to 1/e
+const GRAIN = { strength: 0.10, size: 1.6, mottle: 0.05 };     // size: px (1 px fades out when shown smaller); mottle: ~90 px blotches
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 const f = n => +n.toFixed(1);
 // The line starts a little inside the sphere, which hides its end: it goes straight into the bobber.
@@ -36,6 +44,72 @@ const svg = (body, defs = []) =>
   `${body}\n</svg>\n`;
 const square = 'x="100" y="100" width="824" height="824" rx="185"';
 const innerSquare = 'x="101.5" y="101.5" width="821" height="821" rx="183.5"';
+
+// A w × h grey + alpha PNG as a data URI. `value(x, y)` (pixel centres) > 0 lightens with white, < 0
+// darkens with black; its size is the opacity.
+function pngDataUri(w, h, value) {
+  const row = 1 + w * 2, raw = Buffer.alloc(row * h);  // each row: filter byte 0, then grey/alpha pairs
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = Math.max(-1, Math.min(1, value(x + 0.5, y + 0.5))), i = y * row + 1 + x * 2;
+    raw[i] = v > 0 ? 255 : 0;
+    raw[i + 1] = Math.round(Math.abs(v) * 255);
+  }
+  const chunk = (type, data) => {
+    const b = Buffer.alloc(12 + data.length);
+    b.writeUInt32BE(data.length);
+    b.write(type, 4);
+    data.copy(b, 8);
+    b.writeUInt32BE(crc32(b.subarray(4, 8 + data.length)), 8 + data.length);
+    return b;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 4;  // grey + alpha
+  const png = Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0)),
+  ]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+// Deterministic noise, so regenerating gives the same files.
+const hash = (x, y) => {
+  let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 2 ** 32;
+};
+const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// period: repeat every `period` lattice cells (for a tile), or never.
+const valueNoise = (x, y, period = 0) => {
+  const xi = Math.floor(x), yi = Math.floor(y), u = smoothstep(0, 1, x - xi), v = smoothstep(0, 1, y - yi);
+  const at = (i, j) => period ? hash((i % period + period) % period, (j % period + period) % period) : hash(i, j);
+  const a = at(xi, yi), b = at(xi + 1, yi), c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+};
+const fbm = (x, y) => {  // 4 octaves, 0–1
+  let sum = 0, amp = 0.5, freq = 1, total = 0;
+  for (let i = 0; i < 4; i++, amp /= 2, freq *= 2) { sum += amp * valueNoise(x * freq + i * 17.3, y * freq - i * 9.1); total += amp; }
+  return sum / total;
+};
+
+// Ripples and mottle, over the icon square only (824 px from 100, 100).
+const ripples = pngDataUri(824, 824, (px, py) => {
+  const x = px + 100, y = py + 100, dx = x - BOBBER.cx, dy = y - BOBBER.cy, d = Math.hypot(dx, dy);
+  const mottle = (fbm(x / 90, y / 90) - 0.5) * GRAIN.mottle;
+  if (d < BOBBER.r) return mottle;
+  const out = d - BOBBER.r;
+  const k = 2 * Math.PI / (RIPPLE.wavelength + out * 0.08);
+  const fade = Math.exp(-out / RIPPLE.fade) * smoothstep(0, 25, out);
+  const slope = Math.cos(out * k) * fade;      // the ripple's slope, outward
+  const light = (0.6 * dx + 0.8 * dy) / d;     // > 0 where the slope faces the light (top left)
+  const ruffle = (valueNoise(x / 8, y / 8) - 0.5) * 0.02 * fade;
+  return slope * (RIPPLE.strength * light + 0.015) + ruffle + mottle;
+});
+// Grain, a 256 px tile repeated over the square (a full-size one would add a megabyte of noise).
+const grainCells = Math.round(256 / GRAIN.size), grainCell = 256 / grainCells;
+const grain = pngDataUri(256, 256, (x, y) => (valueNoise(x / grainCell, y / grainCell, grainCells) - 0.5) * 2 * GRAIN.strength);
 
 // ── Pieces ─────────────────────────────────────────────────────────────────
 const { r } = BOBBER;
@@ -51,6 +125,7 @@ const defs = {
   lineGrad: `    <linearGradient id="line-grad" x1="${f(-LINE.width / 2)}" y1="0" x2="${f(LINE.width / 2)}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#DCE2EA"/><stop offset=".30" stop-color="#FFFFFF"/><stop offset=".68" stop-color="#E4E9F0"/><stop offset="1" stop-color="#9CA6B4"/></linearGradient>`,
   // Shadows behind the bobber & line (no SVG <filter>, so PNG & SVG renderers match).
   shadowBobber: `    <radialGradient id="shadow-bobber" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#000000" stop-opacity=".72"/><stop offset=".54" stop-color="#000000" stop-opacity=".64"/><stop offset=".69" stop-color="#000000" stop-opacity=".42"/><stop offset=".80" stop-color="#000000" stop-opacity=".20"/><stop offset=".90" stop-color="#000000" stop-opacity=".06"/><stop offset="1" stop-color="#000000" stop-opacity="0"/></radialGradient>`,
+  grain: `    <pattern id="grain" width="256" height="256" patternUnits="userSpaceOnUse"><image width="256" height="256" href="${grain}"/></pattern>`,
   clip: `    <clipPath id="square"><rect ${square}/></clipPath>`,
   bobberClip: `    <clipPath id="bobber-clip"><circle r="${r}"/></clipPath>`,
 };
@@ -63,10 +138,8 @@ const background = [
 
 const backgroundRich = [
   background,
-  `  <g clip-path="url(#square)">`,
-  `    <circle cx="${BOBBER.cx}" cy="${BOBBER.cy}" r="285" fill="none" stroke="#FFFFFF" stroke-opacity="0.045" stroke-width="1.5"/>`,
-  `    <circle cx="${BOBBER.cx}" cy="${BOBBER.cy}" r="365" fill="none" stroke="#FFFFFF" stroke-opacity="0.025" stroke-width="1.5"/>`,
-  `  </g>`,
+  `  <image x="100" y="100" width="824" height="824" clip-path="url(#square)" href="${ripples}"/>`,
+  `  <rect ${square} fill="url(#grain)"/>`,
 ].join('\n');
 
 const lineShadowStrokes = [14, 12, 10, 8, 6, 4]
@@ -111,7 +184,7 @@ const files = {
   'app-icon.svg': svg(
     [backgroundRich, shadows, line, bobber, tileOverlay].join('\n'),
     [
-      defs.bg, defs.bgSpot, defs.coralGlow, defs.gloss, defs.bevel,
+      defs.bg, defs.bgSpot, defs.coralGlow, defs.grain, defs.gloss, defs.bevel,
       defs.topSphere, defs.botSphere,
       defs.lineGrad,
       defs.shadowBobber,
@@ -119,7 +192,7 @@ const files = {
     ],
   ),
   // Separate layers for Icon Composer: the background goes in as the icon's fill.
-  'layers/1-background.svg': svg(backgroundRich, [defs.bg, defs.bgSpot, defs.coralGlow, defs.clip]),
+  'layers/1-background.svg': svg(backgroundRich, [defs.bg, defs.bgSpot, defs.coralGlow, defs.grain, defs.clip]),
   'layers/2-line.svg': svg(line, [defs.lineGrad, defs.clip]),
   'layers/3-bobber.svg': svg(bobber, [
     defs.topSphere, defs.botSphere,
