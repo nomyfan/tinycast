@@ -13,8 +13,7 @@ nsh run                       # build and run with logs; Rust edits rebuild and 
 cargo build                   # compile only (fast feedback)
 cargo test --lib              # unit tests (src/config.rs has them)
 cargo test --lib config::tests::cmd_space_is_a_keystroke   # one test
-cargo fmt                     # format; CI runs `cargo fmt --check`
-cargo clippy --all-targets -- -D warnings   # lints, as CI runs them
+prek install                  # once per clone: run fmt and clippy on commit (prek.toml)
 nsh package --target macos    # release build: .nsh/out/Tinycast.app, signed ad hoc
 scripts/build.sh              # the same, re-signed with a Keychain certificate (MACOS_SIGNING_IDENTITY overrides)
 ```

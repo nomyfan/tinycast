@@ -1,0 +1,11 @@
+# Git hooks run by prek (https://prek.j178.dev): `prek install` once per clone.
+# The same checks as the lint job in .github/workflows/ci.yml.
+#:schema https://www.schemastore.org/prek.json
+
+[[repos]]
+repo = "local"
+hooks = [
+    # Formats in place; the commit stops if it changed anything, to stage again.
+    { id = "cargo-fmt", name = "cargo fmt", language = "system", entry = "cargo fmt", pass_filenames = false, types = ["rust"] },
+    { id = "cargo-clippy", name = "cargo clippy", language = "system", entry = "cargo clippy --all-targets --locked -- -D warnings", pass_filenames = false, files = '(\.rs|^Cargo\.(toml|lock))$' },
+]
