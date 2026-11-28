@@ -19,15 +19,15 @@ objc2 = "0.6.5"
 pinyin = { version = "0.11", default-features = false, features = ["plain", "heteronym"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nsh-platform-linux = { version = "0.6.1", default-features = false, features = ["shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "websocket", "updater", "svg", "net", "sound"] }
+nsh-platform-linux = { version = "0.6.1", default-features = false, features = ["svg"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-nsh-platform-macos = { version = "0.6.1", default-features = false, features = ["shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "websocket", "updater", "svg"] }
+nsh-platform-macos = { version = "0.6.1", default-features = false, features = ["svg"] }
 dispatch2 = "0.3.1"
 tokio = { version = "1", default-features = false, features = ["sync"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-nsh-platform-windows = { version = "0.6.1", default-features = false, features = ["shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "websocket", "updater", "svg", "net"] }
+nsh-platform-windows = { version = "0.6.1", default-features = false, features = ["svg"] }
 
 [target.'cfg(target_os = "macos")'.dependencies.block2]
 version = "0.6.2"
